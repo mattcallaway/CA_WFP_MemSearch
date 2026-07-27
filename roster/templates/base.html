@@ -89,6 +89,36 @@
                     <a class="navbar-item" href="{% url 'people_list' %}">
                         Roster Directory
                     </a>
+                    {% if perms.roster.view_geography_reference %}
+                    <div class="navbar-item has-dropdown is-hoverable">
+                        <a class="navbar-link" style="color: #ffffff !important;">
+                            Geography
+                        </a>
+                        <div class="navbar-dropdown">
+                            <a class="navbar-item" href="{% url 'geography_datasets_list' %}" style="color: #363636 !important;">
+                                Datasets
+                            </a>
+                            <a class="navbar-item" href="{% url 'county_directory' %}" style="color: #363636 !important;">
+                                Counties
+                            </a>
+                            <a class="navbar-item" href="{% url 'place_directory' %}" style="color: #363636 !important;">
+                                Places
+                            </a>
+                            <a class="navbar-item" href="{% url 'postal_area_directory' %}" style="color: #363636 !important;">
+                                Postal Areas
+                            </a>
+                            <a class="navbar-item" href="{% url 'geography_alias_directory' %}" style="color: #363636 !important;">
+                                Aliases
+                            </a>
+                            {% if perms.roster.resolve_geography_ambiguity %}
+                            <hr class="navbar-divider">
+                            <a class="navbar-item" href="{% url 'geography_ambiguity_queue' %}" style="color: #363636 !important;">
+                                Ambiguity Queue
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="navbar-end">

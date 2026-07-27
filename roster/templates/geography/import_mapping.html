@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Map Geography Reference Columns</h1>
+        <p class="subtitle is-6">Configure metadata and mapping rules for file: <strong>{{ file_name }}</strong></p>
+
+        <form action="{% url 'geography_import_execute' %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="file_name" value="{{ file_name }}">
+            <input type="hidden" name="temp_path" value="{{ temp_path }}">
+
+            <div class="columns">
+                <!-- Left Column: Dataset Metadata -->
+                <div class="column is-6">
+                    <div class="card">
+                        <header class="card-header">
+                            <p class="card-header-title">Dataset Metadata</p>
+                        </header>
+                        <div class="card-content">
+                            <div class="field">
+                                <label class="label">Dataset Name</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="dataset_name" placeholder="e.g. USPS CA ZIP-to-County Crosswalk 2026" required>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Dataset Type</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="dataset_type" id="datasetTypeSelect" required>
+                                            {% for code, label in types %}
+                                                <option value="{{ code }}">{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Version</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="version" value="1.0" required>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Source Organization</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="source_org" placeholder="e.g. USPS, Census Bureau" required>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Description</label>
+                                <div class="control">
+                                    <textarea class="textarea" name="description" placeholder="Notes on dataset scope, boundaries, etc."></textarea>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="checkbox">
+                                    <input type="checkbox" name="override_duplicate" value="true">
+                                    Override Duplicate File Check
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Header Mappings -->
+                <div class="column is-6">
+                    <div class="card">
+                        <header class="card-header">
+                            <p class="card-header-title">Column Mappings</p>
+                        </header>
+                        <div class="card-content">
+                            <p class="is-size-7 has-text-grey mb-4">Map target fields to matching columns parsed from your CSV file. Leaving columns blank means they are optional or not supplied in this dataset type.</p>
+                            
+                            <!-- Dynamic show fields depending on type -->
+                            <div id="mappingFieldsContainer">
+                                <!-- Placeholders for mappings -->
+                                {% for field in "COUNTY_NAME,COUNTY_IDENTIFIER,PLACE_NAME,PLACE_IDENTIFIER,PLACE_TYPE,POSTAL_CODE,POSTAL_AREA_TYPE,DISPLAY_NAME,STATE_CODE,STATE_FIPS,COUNTY_FIPS_COMPONENT,COUNTY_GEOID,PLACE_FIPS_COMPONENT,PLACE_GEOID,ANSI,GNIS,WEIGHT_VALUE,WEIGHT_BASIS,WEIGHT_UNIT,ORIGINAL_ALIAS,ALIAS_TYPE,TARGET_NAME,TARGET_TYPE,SCHEME,VALUE,COMPONENT_DESIGNATION,ISSUING_AUTHORITY"|make_list if False else "" %}
+                                {% endfor %}
+
+                                <!-- We list all target columns, showing/hiding them or just listing them all cleanly with a label -->
+                                <div class="box p-3 mb-3">
+                                    <p class="subtitle is-6 mb-2">Primary Fields</p>
+                                    <div class="field">
+                                        <label class="label is-small">Postal Code (ZIP / ZCTA)</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_POSTAL_CODE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">County Name / Label</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_COUNTY_NAME"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Place Name (City, CDP)</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_PLACE_NAME"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Place Type (e.g. CITY, TOWN, CDP)</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_PLACE_TYPE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">State Code (e.g. 'CA')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_STATE_CODE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="box p-3 mb-3">
+                                    <p class="subtitle is-6 mb-2">Administrative Identifiers</p>
+                                    <div class="field">
+                                        <label class="label is-small">State FIPS (e.g. '06')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_STATE_FIPS"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">County component FIPS (e.g. '001')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_COUNTY_FIPS_COMPONENT"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">County GEOID (e.g. '06001')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_COUNTY_GEOID"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Place FIPS component (e.g. '53000')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_PLACE_FIPS_COMPONENT"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Place GEOID (e.g. '0653000')</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_PLACE_GEOID"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">ANSI Code</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_ANSI"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">GNIS ID</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_GNIS"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="box p-3 mb-3">
+                                    <p class="subtitle is-6 mb-2">Relationship Weights</p>
+                                    <div class="field">
+                                        <label class="label is-small">Coverage / Weight Value</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_WEIGHT_VALUE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Weight Basis (choices basis)</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_WEIGHT_BASIS"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Weight Unit</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_WEIGHT_UNIT"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="box p-3 mb-3">
+                                    <p class="subtitle is-6 mb-2">Aliases & Generic Identifiers</p>
+                                    <div class="field">
+                                        <label class="label is-small">Original Alias Text</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_ORIGINAL_ALIAS"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Alias Type / Tag</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_ALIAS_TYPE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Target Name / Ref</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_TARGET_NAME"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Target Type (COUNTY/PLACE/POSTAL)</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_TARGET_TYPE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Generic Scheme Name</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_SCHEME"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label class="label is-small">Generic Identifier Value</label>
+                                        <div class="select is-small is-fullwidth">
+                                            <select name="map_VALUE"><option value="">-- Skip Field --</option>{% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}</select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field mt-5">
+                                <div class="control">
+                                    <button type="submit" class="button is-link is-fullwidth">
+                                        Save Profile and Run Validation
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

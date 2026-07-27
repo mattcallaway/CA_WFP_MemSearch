@@ -9,7 +9,7 @@ def dashboard_redirect(request):
     return redirect('login')
 
 @login_required
-@permission_required('roster.view_importbatch', raise_exception=True)
+@permission_required('roster.view_sensitive_roster', raise_exception=True)
 def dashboard(request):
     # Filter active contributions (excluding rolled-back batches)
     active_contribs = Contribution.objects.filter(
@@ -24,10 +24,17 @@ def dashboard(request):
     unique_people_count = ContributorEntity.objects.filter(entity_type='INDIVIDUAL').count()
     
     # Membership Status Breakdown (taking the latest assessment per entity)
-    # We retrieve the latest MembershipAssessment for each individual ContributorEntity
-    latest_assessments = MembershipAssessment.objects.filter(
+    # For database compatibility, order by date and filter unique records in Python
+    all_assessments = MembershipAssessment.objects.filter(
         contributor_entity__entity_type='INDIVIDUAL'
-    ).order_by('contributor_entity', '-calculation_date').distinct('contributor_entity')
+    ).order_by('contributor_entity_id', '-calculation_date')
+    
+    latest_assessments = []
+    seen_entities = set()
+    for ass in all_assessments:
+        if ass.contributor_entity_id not in seen_entities:
+            seen_entities.add(ass.contributor_entity_id)
+            latest_assessments.append(ass)
     
     status_counts = {
         'ACTIVE': 0,

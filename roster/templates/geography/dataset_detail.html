@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'geography_datasets_list' %}">Geography Datasets</a></li>
+                <li class="is-active"><a href="#" aria-current="page">{{ dataset.name }}</a></li>
+            </ul>
+        </nav>
+
+        <div class="columns">
+            <div class="column is-8">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Dataset Details: {{ dataset.name }}</p>
+                    </header>
+                    <div class="card-content">
+                        <div class="content">
+                            <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth">
+                                <tbody>
+                                    <tr>
+                                        <th>Name</th>
+                                        <td>{{ dataset.name }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Dataset Type</th>
+                                        <td><span class="tag is-info">{{ dataset.dataset_type }}</span></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Source Organization</th>
+                                        <td>{{ dataset.source_organization|default:"-" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Description</th>
+                                        <td>{{ dataset.source_description|default:"-" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Version</th>
+                                        <td><code>{{ dataset.version }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>File Name</th>
+                                        <td><code>{{ dataset.file_name }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>File Hash (SHA-256)</th>
+                                        <td><small><code>{{ dataset.file_hash }}</code></small></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Effective Date</th>
+                                        <td>{{ dataset.effective_date|default:"-" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Obtained Date</th>
+                                        <td>{{ dataset.obtained_date|default:"-" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Status</th>
+                                        <td>
+                                            <span class="tag 
+                                                {% if dataset.status == 'ACTIVE' %}is-success
+                                                {% elif dataset.status == 'SUPERSEDED' %}is-warning
+                                                {% elif dataset.status == 'ROLLED_BACK' %}is-light
+                                                {% else %}is-danger{% endif %}">
+                                                {{ dataset.status }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>Resolver Priority</th>
+                                        <td>{{ dataset.resolver_priority }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Imported By</th>
+                                        <td>{{ dataset.imported_by }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Notes</th>
+                                        <td>{{ dataset.notes|default:"-" }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="column is-4">
+                <!-- Administrative Controls -->
+                <div class="card mb-4">
+                    <header class="card-header">
+                        <p class="card-header-title">Administrative Actions</p>
+                    </header>
+                    <div class="card-content">
+                        {% if dataset.status != 'ACTIVE' and dataset.status != 'ROLLED_BACK' %}
+                            {% if perms.roster.manage_geography_reference %}
+                            <form action="{% url 'geography_dataset_activate' dataset.id %}" method="post" class="mb-3">
+                                {% csrf_token %}
+                                <div class="field">
+                                    <label class="label">Resolver Priority</label>
+                                    <div class="control">
+                                        <input class="input" type="number" name="priority" value="100" min="1" max="1000">
+                                    </div>
+                                    <p class="help">Higher priority datasets override lower ones during matching</p>
+                                </div>
+                                <button type="submit" class="button is-success is-fullwidth">
+                                    <span class="icon"><i class="fas fa-check"></i></span>
+                                    <span>Activate Dataset</span>
+                                </button>
+                            </form>
+                            {% endif %}
+                        {% endif %}
+
+                        {% if pending_runs %}
+                            <div class="notification is-info is-light p-3 mb-3">
+                                <p class="is-size-7"><strong>Pending Resolution Proposals:</strong></p>
+                                {% for run in pending_runs %}
+                                <form action="{% url 'geography_run_execute' run.id %}" method="post" class="mt-2">
+                                    {% csrf_token %}
+                                    <p class="is-size-7">Proposal #{{ run.id }} &bull; Scope: <code>{{ run.scope }}</code></p>
+                                    <button type="submit" class="button is-link is-small is-fullwidth mt-1">
+                                        <span>Execute Resolution Run</span>
+                                    </button>
+                                </form>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% for batch in batches %}
+                            {% if batch.status == 'COMPLETED' %}
+                                {% if perms.roster.rollback_geography_import %}
+                                <form action="{% url 'geography_batch_rollback' batch.id %}" method="post" class="mb-3">
+                                    {% csrf_token %}
+                                    <button type="submit" class="button is-warning is-fullwidth">
+                                        <span class="icon"><i class="fas fa-undo"></i></span>
+                                        <span>Rollback Batch {{ batch.id }}</span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            {% elif batch.status == 'ROLLED_BACK' %}
+                                {% if perms.roster.rollback_geography_import %}
+                                <form action="{% url 'geography_batch_restore' batch.id %}" method="post" class="mb-3">
+                                    {% csrf_token %}
+                                    <button type="submit" class="button is-link is-fullwidth">
+                                        <span class="icon"><i class="fas fa-redo"></i></span>
+                                        <span>Restore Batch {{ batch.id }}</span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Ingested Batches</p>
+                    </header>
+                    <div class="card-content">
+                        {% for batch in batches %}
+                        <div class="box">
+                            <p><strong>Batch #{{ batch.id }}</strong></p>
+                            <p class="is-size-7 has-text-grey-dark">Filename: <code>{{ batch.file_name }}</code></p>
+                            <p class="is-size-7">Processed: {{ batch.row_count }} rows</p>
+                            <p class="is-size-7 has-text-success">Successful: {{ batch.successful_rows }}</p>
+                            <p class="is-size-7 has-text-danger">Failed: {{ batch.failed_rows }}</p>
+                            <p class="is-size-7 mt-2">
+                                Status: 
+                                <span class="tag is-small 
+                                    {% if batch.status == 'COMPLETED' %}is-success
+                                    {% elif batch.status == 'ROLLED_BACK' %}is-warning
+                                    {% else %}is-danger{% endif %}">
+                                    {{ batch.status }}
+                                </span>
+                            </p>
+                            {% if batch.error_summary %}
+                            <div class="notification is-danger is-light p-2 mt-2 is-size-7">
+                                <strong>Error:</strong> {{ batch.error_summary }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% empty %}
+                        <p class="has-text-grey has-text-centered">No batches recorded.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

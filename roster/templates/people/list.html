@@ -3,8 +3,28 @@
 {% block content %}
 <section class="hero is-small mb-5">
     <div class="hero-body">
-        <h1 class="title is-3">Roster Directory</h1>
-        <p class="subtitle is-6">Search, filter, and audit Working Families Party contributor profiles and membership records.</p>
+        <div class="level">
+            <div class="level-left">
+                <div>
+                    <h1 class="title is-3">Roster Directory</h1>
+                    <p class="subtitle is-6">Search, filter, and audit Working Families Party contributor profiles and membership records.</p>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="buttons">
+                    {% if perms.roster.export_sensitive_data %}
+                        <a href="{% url 'export_roster' %}" class="button is-success">
+                            <span>Export Roster (CSV)</span>
+                        </a>
+                    {% endif %}
+                    {% if perms.roster.view_audit %}
+                        <a href="{% url 'audit_history' %}" class="button is-dark">
+                            <span>View Audit Logs</span>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 

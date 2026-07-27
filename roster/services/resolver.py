@@ -158,13 +158,26 @@ def normalize_name(name_str):
         "suffix": parsed_suffix
     }
 
-def has_conflict(cluster, first_name, middle_name, last_name, suffix, employer, occupation):
+def has_conflict(cluster, first_name, middle_name, last_name, suffix, employer, occupation, assignment_cache=None):
     """
     Checks if a contribution conflicts with an existing cluster.
     """
-    # Use prefetched cache directly to avoid manager pk value check on unsaved clusters
-    if hasattr(cluster, '_prefetched_objects_cache') and 'assignments' in cluster._prefetched_objects_cache:
-        assignments = [a for a in cluster._prefetched_objects_cache['assignments'] if a.is_active]
+    # Use explicit cache if provided, otherwise fallback to DB query
+    if assignment_cache is not None:
+        key = None
+        cache_map = assignment_cache.assignments_by_cluster if hasattr(assignment_cache, 'assignments_by_cluster') else assignment_cache
+        
+        if getattr(cluster, 'id', None) is not None and cluster.id in cache_map:
+            key = cluster.id
+        elif getattr(cluster, '_temp_id', None) is not None and cluster._temp_id in cache_map:
+            key = cluster._temp_id
+        elif cluster in cache_map:
+            key = cluster
+            
+        if key is not None:
+            assignments = [a for a in cache_map[key] if a.is_active]
+        else:
+            assignments = []
     else:
         assignments = ContributionClusterAssignment.objects.filter(
             contribution_cluster=cluster,
@@ -174,8 +187,16 @@ def has_conflict(cluster, first_name, middle_name, last_name, suffix, employer, 
     for assign in assignments:
         c = assign.contribution
         
+        # Retrieve name column name from cache or fallback
+        if assignment_cache and hasattr(assignment_cache, 'name_col'):
+            name_col = assignment_cache.name_col
+        else:
+            batch = c.raw_contribution.import_batch
+            rules = batch.mapping_profile.mapping_rules if (batch and batch.mapping_profile) else {}
+            name_col = rules.get('NAME OF CONTRIBUTOR', 'NAME OF CONTRIBUTOR')
+        
         # Name components conflict checks (if both values are non-empty, they must match)
-        c_parsed = normalize_name(c.raw_contribution.original_values.get('NAME OF CONTRIBUTOR', ''))
+        c_parsed = normalize_name(c.raw_contribution.original_values.get(name_col, ''))
         
         # Suffix conflict
         if suffix and c_parsed['suffix'] and suffix != c_parsed['suffix']:
@@ -207,15 +228,28 @@ def has_conflict(cluster, first_name, middle_name, last_name, suffix, employer, 
                 
     return False
 
-def check_corroboration(cluster, first_name, middle_name, last_name, suffix, employer, occupation):
+def check_corroboration(cluster, first_name, middle_name, last_name, suffix, employer, occupation, assignment_cache=None):
     """
     Returns True if there is positive corroborating evidence matching the cluster.
     (e.g., matching non-empty middle name, suffix, or employer/occupation).
     Absence of a conflict is NOT treated as positive corroboration.
     """
-    # Use prefetched cache directly to avoid manager pk value check on unsaved clusters
-    if hasattr(cluster, '_prefetched_objects_cache') and 'assignments' in cluster._prefetched_objects_cache:
-        assignments = [a for a in cluster._prefetched_objects_cache['assignments'] if a.is_active]
+    # Use explicit cache if provided, otherwise fallback to DB query
+    if assignment_cache is not None:
+        key = None
+        cache_map = assignment_cache.assignments_by_cluster if hasattr(assignment_cache, 'assignments_by_cluster') else assignment_cache
+        
+        if getattr(cluster, 'id', None) is not None and cluster.id in cache_map:
+            key = cluster.id
+        elif getattr(cluster, '_temp_id', None) is not None and cluster._temp_id in cache_map:
+            key = cluster._temp_id
+        elif cluster in cache_map:
+            key = cluster
+            
+        if key is not None:
+            assignments = [a for a in cache_map[key] if a.is_active]
+        else:
+            assignments = []
     else:
         assignments = list(ContributionClusterAssignment.objects.filter(
             contribution_cluster=cluster,
@@ -229,7 +263,16 @@ def check_corroboration(cluster, first_name, middle_name, last_name, suffix, emp
     
     for assign in assignments:
         c = assign.contribution
-        c_parsed = normalize_name(c.raw_contribution.original_values.get('NAME OF CONTRIBUTOR', ''))
+        
+        # Retrieve name column name from cache or fallback
+        if assignment_cache and hasattr(assignment_cache, 'name_col'):
+            name_col = assignment_cache.name_col
+        else:
+            batch = c.raw_contribution.import_batch
+            rules = batch.mapping_profile.mapping_rules if (batch and batch.mapping_profile) else {}
+            name_col = rules.get('NAME OF CONTRIBUTOR', 'NAME OF CONTRIBUTOR')
+            
+        c_parsed = normalize_name(c.raw_contribution.original_values.get(name_col, ''))
         
         # Non-empty matching suffix
         if suffix and c_parsed['suffix'] and suffix == c_parsed['suffix']:

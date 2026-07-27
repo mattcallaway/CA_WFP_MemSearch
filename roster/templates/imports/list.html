@@ -29,7 +29,14 @@
                             </span>
                         </label>
                     </div>
+                {% if perms.roster.override_duplicate_file %}
+                <div class="field">
+                    <label class="checkbox is-size-7">
+                        <input type="checkbox" name="override_duplicate" value="true">
+                        Reprocess duplicate files if found
+                    </label>
                 </div>
+                {% endif %}
                 <div class="field mt-4">
                     <button type="submit" class="button is-link is-fullwidth">Upload and Preview</button>
                 </div>

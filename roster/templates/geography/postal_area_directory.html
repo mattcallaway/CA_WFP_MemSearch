@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Postal Areas Directory</h1>
+        <p class="subtitle is-6">Canonical reference list of California ZIP codes and ZCTAs</p>
+
+        <div class="card mt-5">
+            <div class="card-content">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Postal Code (ZIP / ZCTA)</th>
+                            <th>Postal Area Type</th>
+                            <th>Associated Counties</th>
+                            <th>Associated Places</th>
+                            <th>Active Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for area in postal_areas %}
+                        <tr>
+                            <td><strong><code>{{ area.postal_code }}</code></strong></td>
+                            <td><span class="tag is-info is-light">{{ area.postal_area_type }}</span></td>
+                            <td>
+                                {% for assoc in area.county_associations.all %}
+                                    {% if assoc.is_active %}
+                                        <span class="tag is-light">{{ assoc.county.display_name }} ({{ assoc.weight_value|default:"-" }})</span>
+                                    {% endif %}
+                                {% empty %}
+                                    <span class="has-text-grey">-</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for assoc in area.place_associations.all %}
+                                    {% if assoc.is_active %}
+                                        <span class="tag is-light">{{ assoc.place.canonical_name }}</span>
+                                    {% endif %}
+                                {% empty %}
+                                    <span class="has-text-grey">-</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <span class="tag {% if area.is_active %}is-success is-light{% else %}is-danger is-light{% endif %}">
+                                    {% if area.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="has-text-centered has-text-grey py-5">
+                                No canonical postal areas found in active reference datasets.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -72,7 +72,33 @@
                     </div>
                 </div>
                 <div class="field">
-                    <button type="submit" class="button is-small is-link is-fullwidth">Override Status</button>
+            </form>
+
+            <hr>
+            
+            <!-- Entity Type Correction Form -->
+            <h4 class="title is-6 mb-3">Reclassify Contributor Type</h4>
+            <form action="{% url 'correct_entity_type' entity.id %}" method="post">
+                {% csrf_token %}
+                <div class="field">
+                    <div class="control">
+                        <div class="select is-fullwidth is-small">
+                            <select name="entity_type" required>
+                                <option value="INDIVIDUAL" {% if entity.entity_type == 'INDIVIDUAL' %}selected{% endif %}>Individual</option>
+                                <option value="ORGANIZATION" {% if entity.entity_type == 'ORGANIZATION' %}selected{% endif %}>Organization</option>
+                                <option value="JOINT" {% if entity.entity_type == 'JOINT' %}selected{% endif %}>Joint / Ambiguous</option>
+                                <option value="UNKNOWN" {% if entity.entity_type == 'UNKNOWN' %}selected{% endif %}>Unknown</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="control">
+                        <input class="input is-small" type="text" name="reason" placeholder="Reason for reclassification..." required>
+                    </div>
+                </div>
+                <div class="field">
+                    <button type="submit" class="button is-small is-warning is-fullwidth">Correct Entity Type</button>
                 </div>
             </form>
         </div>

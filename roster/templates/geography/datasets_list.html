@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <div class="level">
+            <div class="level-left">
+                <div>
+                    <h1 class="title">Geography Reference Datasets</h1>
+                    <p class="subtitle is-6">Manage California county, place, ZIP and ZCTA data files</p>
+                </div>
+            </div>
+            <div class="level-right">
+                {% if perms.roster.import_geography_reference %}
+                <a href="{% url 'geography_import_upload' %}" class="button is-link">
+                    <span class="icon"><i class="fas fa-upload"></i></span>
+                    <span>Import Reference File</span>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="columns mt-5">
+            <div class="column is-12">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Active Geographic Reference Datasets</p>
+                    </header>
+                    <div class="card-content">
+                        <table class="table is-fullwidth is-striped is-hoverable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Version</th>
+                                    <th>Effective Date</th>
+                                    <th>Authority</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ds in datasets %}
+                                <tr>
+                                    <td><strong><a href="{% url 'geography_dataset_detail' ds.id %}">{{ ds.name }}</a></strong></td>
+                                    <td><span class="tag is-info is-light">{{ ds.dataset_type }}</span></td>
+                                    <td>{{ ds.version }}</td>
+                                    <td>{{ ds.effective_date|default:"-" }}</td>
+                                    <td>{{ ds.authority_level }}</td>
+                                    <td>{{ ds.resolver_priority }}</td>
+                                    <td>
+                                        <span class="tag 
+                                            {% if ds.status == 'ACTIVE' %}is-success
+                                            {% elif ds.status == 'SUPERSEDED' %}is-warning
+                                            {% elif ds.status == 'ROLLED_BACK' %}is-light
+                                            {% else %}is-danger{% endif %}">
+                                            {{ ds.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'geography_dataset_detail' ds.id %}" class="button is-small is-light">View</a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="has-text-centered has-text-grey py-5">
+                                        No geographic datasets found. Upload a CSV to get started.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="columns mt-4">
+            <div class="column is-12">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Import History & Audit Log</p>
+                    </header>
+                    <div class="card-content">
+                        <table class="table is-fullwidth is-striped is-hoverable">
+                            <thead>
+                                <tr>
+                                    <th>Batch ID</th>
+                                    <th>Filename</th>
+                                    <th>Dataset</th>
+                                    <th>Rows</th>
+                                    <th>Successful</th>
+                                    <th>Failed</th>
+                                    <th>Imported By</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for batch in batches %}
+                                <tr>
+                                    <td>{{ batch.id }}</td>
+                                    <td><code>{{ batch.file_name }}</code></td>
+                                    <td><a href="{% url 'geography_dataset_detail' batch.dataset.id %}">{{ batch.dataset.name }}</a></td>
+                                    <td>{{ batch.row_count }}</td>
+                                    <td class="has-text-success">{{ batch.successful_rows }}</td>
+                                    <td class="has-text-danger">{{ batch.failed_rows }}</td>
+                                    <td>{{ batch.actor }}</td>
+                                    <td>{{ batch.started_time|date:"Y-m-d H:i" }}</td>
+                                    <td>
+                                        <span class="tag 
+                                            {% if batch.status == 'COMPLETED' %}is-success is-light
+                                            {% elif batch.status == 'ROLLED_BACK' %}is-warning is-light
+                                            {% else %}is-danger is-light{% endif %}">
+                                            {{ batch.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="has-text-centered has-text-grey py-5">
+                                        No geography import batches found.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

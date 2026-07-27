@@ -2,78 +2,21 @@ import csv
 import hashlib
 import decimal
 import re
-from datetime import datetime
-from django.db import transaction
-from django.utils.dateparse import parse_date as django_parse_date
-from django.contrib.auth.models import User
-from roster.models import (
-    ImportBatch, ImportMappingProfile, RawContribution, Contribution, 
-    ContributionClusterAssignment, ContributionCluster, Location, 
-    AuditEvent, FieldAssertion
-)
-from roster.services.resolver import resolve_and_cluster_contribution
-
-def compute_file_hash(file_path):
-    sha256 = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        while chunk := f.read(8192):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-def compute_row_hash(row_dict):
-    # Standardize row dict values to compute a unique string representation
-    sorted_items = sorted((str(k).strip(), str(v).strip()) for k, v in row_dict.items())
-    row_str = "||".join(f"{k}:{v}" for k, v in sorted_items)
-    return hashlib.sha256(row_str.encode('utf-8')).hexdigest()
-
-def parse_date(date_str):
-    if not date_str or not str(date_str).strip():
-        return None
-    cleaned = str(date_str).strip()
-    
-    # Try Django's standard ISO format parser
-    try:
-        dt = django_parse_date(cleaned)
-        if dt:
-            return dt
-    except ValueError:
-        pass
-        
-    # Try other common formats
-    formats = [
-        '%Y-%m-%d', '%m/%d/%Y', '%m/%d/%y', '%Y/%m/%d',
-        '%d-%m-%Y', '%Y-%b-%d', '%d %b %Y'
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(cleaned, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-def parse_decimal(amount_str):
-    if not amount_str or not str(amount_str).strip():
-        return None
-    cleaned = str(amount_str).strip().replace('$', '').replace(',', '')
-    try:
-        return decimal.Decimal(cleaned)
-    except (decimal.InvalidOperation, ValueError):
-        return None
-
-import csv
-import hashlib
-import decimal
-import re
 import os
-from datetime import datetime
+from datetime import datetime, date
 from django.db import transaction
+from django.db.models import Q
 from django.utils.dateparse import parse_date as django_parse_date
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
+
 from roster.models import (
-    ImportBatch, ImportMappingProfile, RawContribution, Contribution, 
-    ContributionClusterAssignment, ContributionCluster, Location, 
-    AuditEvent, FieldAssertion, ImportAttempt, ContributorEntity, Person, Organization
+    ImportBatch, ImportMappingProfile, RawContribution, Contribution, ContributorEntity,
+    Person, Organization, ContributionClusterAssignment, ContributionCluster,
+    Location, AuditEvent, FieldAssertion, ImportAttempt, MembershipAssessment
 )
+from roster.services.resolver import normalize_name, detect_entity_type, check_corroboration, has_conflict
+from roster.services.cache import IngestionCache
 
 def compute_file_hash(file_path):
     sha256 = hashlib.sha256()
@@ -82,101 +25,84 @@ def compute_file_hash(file_path):
             sha256.update(chunk)
     return sha256.hexdigest()
 
-def compute_row_hash(row_dict):
-    # Standardize row dict values to compute a unique string representation
-    sorted_items = sorted((str(k).strip(), str(v).strip()) for k, v in row_dict.items())
-    row_str = "||".join(f"{k}:{v}" for k, v in sorted_items)
-    return hashlib.sha256(row_str.encode('utf-8')).hexdigest()
+def compute_row_hash(row_data):
+    sorted_items = sorted([(str(k), str(v)) for k, v in row_data.items() if v is not None])
+    row_string = "".join(f"{k}:{v}" for k, v in sorted_items)
+    return hashlib.sha256(row_string.encode('utf-8')).hexdigest()
 
-def parse_date(date_str):
-    if not date_str or not str(date_str).strip():
+def parse_decimal(value):
+    if not value:
         return None
-    cleaned = str(date_str).strip()
-    
-    # Try Django's standard ISO format parser
+    cleaned = value.replace('$', '').replace(',', '').strip()
     try:
-        dt = django_parse_date(cleaned)
-        if dt:
-            return dt
+        return decimal.Decimal(cleaned)
+    except decimal.InvalidOperation:
+        return None
+
+def parse_date(value):
+    if not value:
+        return None
+    cleaned = value.strip()
+    # Support YYYY-MM-DD
+    try:
+        parsed = django_parse_date(cleaned)
+        if parsed:
+            return parsed
     except ValueError:
         pass
-        
-    # Try other common formats
-    formats = [
-        '%Y-%m-%d', '%m/%d/%Y', '%m/%d/%y', '%Y/%m/%d',
-        '%d-%m-%Y', '%Y-%b-%d', '%d %b %Y'
-    ]
-    for fmt in formats:
+    # Support MM/DD/YYYY or M/D/YYYY
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%d/%m/%Y', '%Y/%m/%d'):
         try:
             return datetime.strptime(cleaned, fmt).date()
         except ValueError:
             continue
     return None
-
-def parse_decimal(amount_str):
-    if not amount_str or not str(amount_str).strip():
-        return None
-    cleaned = str(amount_str).strip().replace('$', '').replace(',', '')
-    try:
-        return decimal.Decimal(cleaned)
-    except (decimal.InvalidOperation, ValueError):
-        return None
 
 @transaction.atomic
 def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", override_duplicate=False):
     """
-    Imports a CSV file containing contribution records.
-    Applies column mappings, row validation, duplicate checks, and generates derived views.
+    Imports a CSV file of SOS contributions.
     """
-    # 1. Limit check (max 10MB size)
-    file_size = os.path.getsize(file_path)
-    if file_size > 10 * 1024 * 1024:
-        raise ValueError("CSV file exceeds maximum size limit of 10MB.")
-
-    mapping_profile = ImportMappingProfile.objects.get(id=mapping_profile_id)
-    rules = mapping_profile.mapping_rules
+    profile = ImportMappingProfile.objects.get(id=mapping_profile_id)
+    rules = profile.mapping_rules
     
-    # Read and parse file
-    rows = []
-    with open(file_path, mode='r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(dict(row))
-            
-    # Max rows guard
-    if len(rows) > 10000:
-        raise ValueError("CSV exceeds maximum limit of 10,000 rows.")
-
-    # Compute and verify file hash
     file_hash = compute_file_hash(file_path)
     
-    # Preferred duplicate-file override design: reprocess the existing batch canonical record
-    existing_batch = ImportBatch.objects.filter(file_hash=file_hash).first()
-    if existing_batch:
+    # 1. Exact-file duplicate checking
+    existing_completed_batch = ImportBatch.objects.filter(file_hash=file_hash, status='COMPLETED').first()
+    if existing_completed_batch:
         if not override_duplicate:
+            # Create failed attempt
+            ImportAttempt.objects.create(
+                import_batch=existing_completed_batch,
+                attempted_by=actor,
+                action="REPROCESS_FAILED",
+                notes=f"Attempted to import duplicate file hash '{file_hash}' without authorization override."
+            )
             raise ValueError("This file has already been imported successfully.")
         else:
-            # 1. Roll back the existing completed batch calculations non-destructively
-            rollback_batch(existing_batch.id, actor=actor)
-            # 2. Deletes normalized contributions (cascades to assignments/locations)
-            Contribution.objects.filter(raw_contribution__import_batch=existing_batch).delete()
-            # 3. Reset existing raw contributions
-            RawContribution.objects.filter(import_batch=existing_batch).update(
-                validation_status='UNPROCESSED',
-                validation_errors=None
+            # Overwrite/Reprocess flow
+            AuditEvent.objects.create(
+                event_type="OVERRIDE_DUPLICATE",
+                description=f"Authorized override for duplicate file '{file_name}' (hash: {file_hash}). Reprocessing batch {existing_completed_batch.id}.",
+                actor=actor
             )
-            batch = existing_batch
-            batch.file_name = file_name
-            batch.mapping_profile = mapping_profile
-            batch.imported_by = actor
-            batch.status = 'VALIDATING'
+            # Delete old normalized data for this batch non-destructively
+            Contribution.objects.filter(raw_contribution__import_batch=existing_completed_batch).delete()
+            # Reset raw contribution validation statuses to unprocessed
+            RawContribution.objects.filter(import_batch=existing_completed_batch).update(
+                validation_status='UNPROCESSED',
+                validation_errors=''
+            )
+            batch = existing_completed_batch
+            batch.status = 'PENDING'
             batch.save()
             
             ImportAttempt.objects.create(
                 import_batch=batch,
                 attempted_by=actor,
-                action='REPROCESS_OVERRIDE',
-                notes=f"Overrode duplicate file. Reprocessing batch."
+                action="REPROCESS_START",
+                notes=f"Reprocessing of batch {batch.id} initiated."
             )
     else:
         # Create a new batch
@@ -185,22 +111,19 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
             file_hash=file_hash,
             file_type="CSV",
             imported_by=actor,
-            mapping_profile=mapping_profile,
-            status='VALIDATING'
+            mapping_profile=profile,
+            status='PENDING'
         )
         ImportAttempt.objects.create(
             import_batch=batch,
             attempted_by=actor,
-            action='INITIAL',
-            notes="Initial batch import."
+            action="IMPORT_START",
+            notes=f"Initial import of batch {batch.id} started."
         )
-        
-    batch.row_count = len(rows)
-    batch.save()
-    
-    # Pre-parse mappings and calculate row hashes
+
+    # 2. Parse CSV
     parsed_rows = []
-    raw_row_hashes = []
+    raw_contrib_instances = []
     
     name_col = rules.get('NAME OF CONTRIBUTOR')
     amount_col = rules.get('AMOUNT')
@@ -213,85 +136,87 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
     occ_col = rules.get('OCCUPATION')
     filed_date_col = rules.get('FILED DATE')
     street_col = rules.get('STREET ADDRESS')
-    
-    for index, row_data in enumerate(rows, start=1):
-        row_hash = compute_row_hash(row_data)
-        raw_row_hashes.append(row_hash)
-        
-        name_val = (row_data.get(name_col) or '').strip() if name_col else ''
-        amount_val = (row_data.get(amount_col) or '').strip() if amount_col else ''
-        date_val = (row_data.get(date_col) or '').strip() if date_col else ''
-        zip_val = (row_data.get(zip_col) or '').strip() if zip_col else ''
-        txn_num = (row_data.get(txn_col) or '').strip() if txn_col else ''
-        city_val = (row_data.get(city_col) or '').strip() if city_col else ''
-        state_val = (row_data.get(state_col) or '').strip() if state_col else ''
-        emp_val = (row_data.get(emp_col) or '').strip() if emp_col else ''
-        occ_val = (row_data.get(occ_col) or '').strip() if occ_col else ''
-        filed_date_val = (row_data.get(filed_date_col) or '').strip() if filed_date_col else ''
-        street_val = (row_data.get(street_col) or '').strip() if street_col else ''
-        
-        parsed_rows.append({
-            'index': index,
-            'row_data': row_data,
-            'row_hash': row_hash,
-            'name_val': name_val,
-            'amount_val': amount_val,
-            'date_val': date_val,
-            'zip_val': zip_val,
-            'txn_num': txn_num,
-            'city_val': city_val,
-            'state_val': state_val,
-            'emp_val': emp_val,
-            'occ_val': occ_val,
-            'filed_date_val': filed_date_val,
-            'street_val': street_val,
-        })
-        
-    # Chunked lookup for existing raw row hashes in database to prevent exceeding limits
-    existing_completed_hashes = set()
-    chunk_size = 500
-    for i in range(0, len(raw_row_hashes), chunk_size):
-        chunk = raw_row_hashes[i:i+chunk_size]
-        existing_completed_hashes.update(
-            RawContribution.objects.filter(
-                raw_row_hash__in=chunk,
-                import_batch__status='COMPLETED'
-            ).values_list('raw_row_hash', flat=True)
-        )
-        
-    # Prepare RawContribution row items
-    raw_contrib_instances = []
-    reused_raw_contribs = {}
-    if existing_batch:
-        reused_raw_contribs = {rc.row_number: rc for rc in RawContribution.objects.filter(import_batch=batch)}
-        
-    for p in parsed_rows:
-        row_number = p['index']
-        if row_number in reused_raw_contribs:
-            rc = reused_raw_contribs[row_number]
-            rc.validation_status = 'UNPROCESSED'
-            rc.validation_errors = None
-            raw_contrib_instances.append(rc)
-        else:
-            rc = RawContribution(
-                import_batch=batch,
-                row_number=row_number,
-                original_values=p['row_data'],
-                raw_row_hash=p['row_hash'],
-                validation_status='UNPROCESSED'
-            )
-            raw_contrib_instances.append(rc)
-            
-    if reused_raw_contribs:
-        RawContribution.objects.bulk_update(raw_contrib_instances, ['validation_status', 'validation_errors'])
-        raw_contrib_map = {rc.row_number: rc for rc in raw_contrib_instances}
-    else:
-        created_raw_contribs = RawContribution.objects.bulk_create(raw_contrib_instances)
-        raw_contrib_map = {rc.row_number: rc for rc in created_raw_contribs}
 
-    # Preload existing transactions matching incoming transaction numbers
+    # Fetch existing raw contributions for this batch to avoid N+1 queries in the loop
+    existing_raw_contribs = {rc.row_number: rc for rc in RawContribution.objects.filter(import_batch=batch)}
+
+    # Read the file
+    with open(file_path, mode='r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for index, row in enumerate(reader, start=1):
+            row_hash = compute_row_hash(row)
+            
+            name_val = (row.get(name_col) or '').strip() if name_col else ''
+            amount_val = (row.get(amount_col) or '').strip() if amount_col else ''
+            date_val = (row.get(date_col) or '').strip() if date_col else ''
+            zip_val = (row.get(zip_col) or '').strip() if zip_col else ''
+            txn_num = (row.get(txn_col) or '').strip() if txn_col else ''
+            city_val = (row.get(city_col) or '').strip() if city_col else ''
+            state_val = (row.get(state_col) or '').strip() if state_col else ''
+            emp_val = (row.get(emp_col) or '').strip() if emp_col else ''
+            occ_val = (row.get(occ_col) or '').strip() if occ_col else ''
+            filed_date_val = (row.get(filed_date_col) or '').strip() if filed_date_col else ''
+            street_val = (row.get(street_col) or '').strip() if street_col else ''
+            
+            parsed_rows.append({
+                'index': index,
+                'row_data': row,
+                'row_hash': row_hash,
+                'name_val': name_val,
+                'amount_val': amount_val,
+                'date_val': date_val,
+                'zip_val': zip_val,
+                'txn_num': txn_num,
+                'city_val': city_val,
+                'state_val': state_val,
+                'emp_val': emp_val,
+                'occ_val': occ_val,
+                'filed_date_val': filed_date_val,
+                'street_val': street_val
+            })
+            
+            # Check if this raw contribution already exists for reprocessing from memory
+            raw_contrib = existing_raw_contribs.get(index)
+            if raw_contrib:
+                raw_contrib.original_values = row
+                raw_contrib.raw_row_hash = row_hash
+                raw_contrib.validation_status = 'UNPROCESSED'
+                raw_contrib.validation_errors = ''
+            else:
+                raw_contrib = RawContribution(
+                    import_batch=batch,
+                    row_number=index,
+                    original_values=row,
+                    raw_row_hash=row_hash,
+                    validation_status='UNPROCESSED'
+                )
+            raw_contrib_instances.append(raw_contrib)
+
+    # Bulk create raw contributions if not already in DB
+    if not existing_completed_batch:
+        RawContribution.objects.bulk_create(raw_contrib_instances)
+        
+    raw_contrib_map = {rc.row_number: rc for rc in RawContribution.objects.filter(import_batch=batch)}
+
+    # 3. Instantiate Ingestion Cache and pre-populate lookup lists
+    ing_cache = IngestionCache(name_col=name_col)
+    
+    # Cache existing completed row hashes
+    completed_batches = ImportBatch.objects.filter(status='COMPLETED').exclude(id=batch.id)
+    completed_batch_ids = list(completed_batches.values_list('id', flat=True))
+    
+    # SQLite parameter chunking limit is 32766, chunk size 500 is extremely safe
+    chunk_size = 500
+    for i in range(0, len(completed_batch_ids), chunk_size):
+        batch_chunk = completed_batch_ids[i:i+chunk_size]
+        hashes = RawContribution.objects.filter(
+            import_batch_id__in=batch_chunk,
+            validation_status='ACCEPTED'
+        ).values_list('raw_row_hash', flat=True)
+        ing_cache.existing_completed_hashes.update(hashes)
+
+    # Pre-fetch existing completed transactions with exact transaction numbers
     incoming_txns = [p['txn_num'] for p in parsed_rows if p['txn_num']]
-    existing_txns = {}
     if incoming_txns:
         for i in range(0, len(incoming_txns), chunk_size):
             chunk = incoming_txns[i:i+chunk_size]
@@ -300,11 +225,9 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                 raw_contribution__import_batch__status='COMPLETED'
             ).select_related('raw_contribution')
             for c in qs:
-                existing_txns.setdefault(c.transaction_number, []).append(c)
+                ing_cache.existing_txns.setdefault(c.transaction_number, []).append(c)
 
-    # Collect candidate cluster search keys
-    from roster.services.resolver import normalize_name, detect_entity_type, check_corroboration, has_conflict
-    
+    # Collect search keys for candidate clusters
     unique_names = set()
     unique_zips = set()
     for p in parsed_rows:
@@ -324,8 +247,8 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
         else:
             p['norm_name'] = ''
             p['entity_type'] = 'UNKNOWN'
-            
-    # Batch lookup candidate clusters
+
+    # Batch lookup candidate clusters from DB
     candidate_clusters = []
     if unique_names:
         unique_names_list = list(unique_names)
@@ -338,34 +261,41 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                 'assignments__contribution__raw_contribution'
             )
             candidate_clusters.extend(qs)
-            
-    # Cache candidate clusters by (normalized_name, zip_code)
-    cluster_cache = {}
+
+    # Populate explicit cache mappings
     for cluster in candidate_clusters:
         key = (cluster.normalized_name, cluster.zip_code)
-        cluster_cache.setdefault(key, []).append(cluster)
+        ing_cache.clusters_by_name_zip.setdefault(key, []).append(cluster)
+        ing_cache.cluster_by_id[cluster.id] = cluster
+        ing_cache.entity_by_id[cluster.contributor_entity_id] = cluster.contributor_entity
+        
+        # Cache active assignments explicitly
+        cluster_key = ing_cache.get_cluster_key(cluster)
+        ing_cache.assignments_by_cluster[cluster_key] = list(cluster.assignments.all())
 
     successful_count = 0
     failed_count = 0
     duplicate_count = 0
-    
     seen_in_batch = set()
-    
-    # Store elements to bulk create
+
     contributions_to_create = []
     locations_to_create = []
     assignments_to_create = []
-    
     parsed_contrib_data = {}
-    affected_cluster_ids = set()
-    affected_entity_ids = set()
     
+    entities_to_create = []
+    persons_to_create = []
+    orgs_to_create = []
+    clusters_to_create = []
+    clusters_to_update = []
+
+    # 4. Process CSV rows
     for p in parsed_rows:
         row_number = p['index']
         raw_contrib = raw_contrib_map[row_number]
         
-        # Check exact row duplication
-        if p['row_hash'] in existing_completed_hashes or p['row_hash'] in seen_in_batch:
+        # Check exact duplicate rows
+        if p['row_hash'] in ing_cache.existing_completed_hashes or p['row_hash'] in seen_in_batch:
             raw_contrib.validation_status = 'EXACT_DUPLICATE'
             raw_contrib.validation_errors = "Exact row hash already imported."
             duplicate_count += 1
@@ -395,7 +325,7 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
         warning_msg = None
         
         if p['txn_num']:
-            dups = existing_txns.get(p['txn_num'], [])
+            dups = ing_cache.existing_txns.get(p['txn_num'], [])
             dups_in_batch = [c for c in contributions_to_create if c.transaction_number == p['txn_num']]
             all_dups = dups + dups_in_batch
             
@@ -413,7 +343,7 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                 amount=parsed_amount,
                 transaction_date=parsed_date,
                 raw_contribution__import_batch__status='COMPLETED'
-            )
+            ).select_related('raw_contribution')
             for c in db_composites:
                 c_name = normalize_name(c.raw_contribution.original_values.get(name_col, ''))['normalized_full_name']
                 c_zip = c.raw_contribution.original_values.get(zip_col, '').strip()
@@ -439,7 +369,7 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
         txn_type = 'CONTRIBUTION'
         if parsed_amount < 0:
             name_upper = p['name_val'].upper()
-            if p['txn_num'] and (p['txn_num'].upper().startswith('REF') or p['txn_num'] in existing_txns):
+            if p['txn_num'] and (p['txn_num'].upper().startswith('REF') or p['txn_num'] in ing_cache.existing_txns):
                 txn_type = 'REFUND'
             elif p['txn_num'] and p['txn_num'].upper().startswith('REV'):
                 txn_type = 'REVERSAL'
@@ -449,8 +379,10 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                 txn_type = 'REVERSAL'
             else:
                 txn_type = 'ADJUSTMENT'
-                
+
         parsed_filed_date = parse_date(p['filed_date_val'])
+        
+        # Build raw address string
         raw_address = ", ".join([v for v in [p['street_val'], p['city_val'], p['state_val'], p['zip_formatted']] if v])
         
         contribution = Contribution(
@@ -465,23 +397,20 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
             employer=p['emp_val'],
             occupation=p['occ_val']
         )
+        contribution._raw_contrib_ref = raw_contrib
         
         contributions_to_create.append(contribution)
         parsed_contrib_data[row_number] = p
         successful_count += 1
         
-    RawContribution.objects.bulk_update(raw_contrib_instances, ['validation_status', 'validation_errors'])
+    RawContribution.objects.bulk_update(raw_contrib_map.values(), ['validation_status', 'validation_errors'])
     created_contributions = Contribution.objects.bulk_create(contributions_to_create)
     
-    # 4. Identity clustering and locations
-    entities_to_create = []
-    persons_to_create = []
-    orgs_to_create = []
-    clusters_to_create = []
-    clusters_to_update = []
-    
+    # 5. Identity clustering and locations
+    affected_clusters_list = []
     for c in created_contributions:
-        p = parsed_contrib_data[c.raw_contribution.row_number]
+        raw_contrib = getattr(c, '_raw_contrib_ref', None) or c.raw_contribution
+        p = parsed_contrib_data[raw_contrib.row_number]
         is_org = (p['entity_type'] == 'ORGANIZATION')
         is_joint = (p['entity_type'] == 'JOINT')
         display_name = p['norm_name'] if p['norm_name'] else p['name_val'].upper()
@@ -508,12 +437,14 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                 confidence_level='LOW',
                 confidence_explanation="Non-individual entities are isolated to single clusters by default."
             )
-            cluster._prefetched_objects_cache = {'assignments': []}
+            # Safe temporary key registration
+            cluster_key = ing_cache.get_cluster_key(cluster)
+            ing_cache.assignments_by_cluster[cluster_key] = []
             clusters_to_create.append(cluster)
         else:
-            # Individual candidates check in-memory cache
+            # Check candidate database clusters using explicit cache
             key = (p['norm_name'], p['zip_formatted'])
-            candidates = cluster_cache.get(key, [])
+            candidates = ing_cache.clusters_by_name_zip.get(key, [])
             
             matched_cluster = None
             for cand in candidates:
@@ -523,7 +454,8 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                     normalize_name(p['name_val'])['middle_name'],
                     normalize_name(p['name_val'])['last_name'],
                     normalize_name(p['name_val'])['suffix'],
-                    c.employer, c.occupation
+                    c.employer, c.occupation,
+                    assignment_cache=ing_cache
                 ):
                     corroborated = check_corroboration(
                         cand,
@@ -531,7 +463,8 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                         normalize_name(p['name_val'])['middle_name'],
                         normalize_name(p['name_val'])['last_name'],
                         normalize_name(p['name_val'])['suffix'],
-                        c.employer, c.occupation
+                        c.employer, c.occupation,
+                        assignment_cache=ing_cache
                     )
                     if corroborated:
                         matched_cluster = cand
@@ -568,9 +501,11 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                     confidence_level='LOW',
                     confidence_explanation="Initial low-confidence cluster based on single contribution."
                 )
-                cluster._prefetched_objects_cache = {'assignments': []}
+                # Safe temporary key registration
+                cluster_key = ing_cache.get_cluster_key(cluster)
+                ing_cache.assignments_by_cluster[cluster_key] = []
                 clusters_to_create.append(cluster)
-                cluster_cache.setdefault(key, []).append(cluster)
+                ing_cache.clusters_by_name_zip.setdefault(key, []).append(cluster)
                 
         assignment = ContributionClusterAssignment(
             contribution=c,
@@ -578,11 +513,12 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
             assigned_by=actor,
             is_active=True
         )
+        assignment._cluster_ref = cluster
         assignments_to_create.append(assignment)
         
-        # Append to the prefetch cache in memory
-        if hasattr(cluster, '_prefetched_objects_cache') and 'assignments' in cluster._prefetched_objects_cache:
-            cluster._prefetched_objects_cache['assignments'].append(assignment)
+        # Cache assignment explicitly in-memory using stable cluster key
+        cluster_key = ing_cache.get_cluster_key(cluster)
+        ing_cache.assignments_by_cluster[cluster_key].append(assignment)
         
         location = Location(
             contributor_profile=cluster,
@@ -596,9 +532,11 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
             status='CURRENT',
             is_observed=True
         )
+        location._cluster_ref = cluster
         locations_to_create.append(location)
+        affected_clusters_list.append(cluster)
 
-    # 4.1 Perform bulk creations
+    # 5.1 Perform bulk creations
     if entities_to_create:
         ContributorEntity.objects.bulk_create(entities_to_create)
         
@@ -617,28 +555,49 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
             cluster.contributor_entity_id = cluster.contributor_entity.id
         ContributionCluster.objects.bulk_create(clusters_to_create)
 
-    # Set foreign keys for assignments and locations, and collect affected IDs before bulk_create
+    # Map temporary reference keys to confirmed database primary keys
+    for cluster in clusters_to_create:
+        temp_id = getattr(cluster, '_temp_id', None)
+        if temp_id and temp_id in ing_cache.assignments_by_cluster:
+            ing_cache.assignments_by_cluster[cluster.id] = ing_cache.assignments_by_cluster[temp_id]
+            del ing_cache.assignments_by_cluster[temp_id]
+
+    # Set foreign keys for assignments and locations without triggering descriptor DB queries
     for assign in assignments_to_create:
-        cluster = assign.contribution_cluster
-        affected_cluster_ids.add(cluster.id)
-        affected_entity_ids.add(cluster.contributor_entity_id)
-        assign.contribution_cluster_id = cluster.id
+        assign.contribution_cluster_id = assign._cluster_ref.id
         
     for loc in locations_to_create:
-        loc.contributor_profile_id = loc.contributor_profile.id
+        loc.contributor_profile_id = loc._cluster_ref.id
+
+    affected_cluster_ids = {cluster.id for cluster in affected_clusters_list if getattr(cluster, 'id', None)}
+    affected_entity_ids = {cluster.contributor_entity_id for cluster in affected_clusters_list if getattr(cluster, 'contributor_entity_id', None)}
 
     ContributionClusterAssignment.objects.bulk_create(assignments_to_create)
     Location.objects.bulk_create(locations_to_create)
     
     if clusters_to_update:
         ContributionCluster.objects.bulk_update(clusters_to_update, ['confidence_level', 'confidence_explanation'])
-    
+        
     # Mark batch complete
+    batch.row_count = len(parsed_rows)
     batch.successful_rows = successful_count
     batch.failed_rows = failed_count
     batch.duplicate_rows = duplicate_count
     batch.status = 'COMPLETED'
     batch.save()
+    
+    # Save bulk SourceRecordLinks
+    # Stage 1.1 Ingestion Hardening requirement: create links
+    from roster.models import SourceRecordLink
+    links_to_create = []
+    for c in created_contributions:
+        links_to_create.append(SourceRecordLink(
+            source_model_name="RawContribution",
+            source_record_id=c.raw_contribution.id,
+            target_model_name="Contribution",
+            target_record_id=c.id
+        ))
+    SourceRecordLink.objects.bulk_create(links_to_create)
     
     AuditEvent.objects.create(
         event_type="IMPORT_BATCH",
@@ -652,6 +611,10 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
     evaluate_cluster_recurrence_bulk(list(affected_cluster_ids))
     evaluate_membership_for_entities(list(affected_entity_ids))
     clear_membership_caches()
+    
+    # Explicitly discard/clear cache references
+    del ing_cache
+    
     return batch
 
 
@@ -673,9 +636,7 @@ def recalculate_batch_entities(batch):
 def rollback_batch(batch_id, actor="SYSTEM"):
     """
     Rolls back an import batch non-destructively.
-    Marks the batch as ROLLED_BACK, which automatically excludes its contributions
-    from aggregates (since queries filter out rolled back batch contributions).
-    Recalculates affected profile and entity metrics.
+    Marks the batch as ROLLED_BACK, deactivates assignments, and updates metrics.
     """
     batch = ImportBatch.objects.get(id=batch_id)
     if batch.status == 'ROLLED_BACK':
@@ -685,12 +646,9 @@ def rollback_batch(batch_id, actor="SYSTEM"):
     batch.save()
     
     # Deactivate assignments created by this batch
-    assignments = ContributionClusterAssignment.objects.filter(
+    ContributionClusterAssignment.objects.filter(
         contribution__raw_contribution__import_batch=batch
-    )
-    for assign in assignments:
-        assign.is_active = False
-        assign.save()
+    ).update(is_active=False)
         
     # Log event
     AuditEvent.objects.create(
@@ -715,13 +673,10 @@ def restore_batch(batch_id, actor="SYSTEM"):
     batch.status = 'COMPLETED'
     batch.save()
     
-    # Reactivate assignments created by this batch (unless they were overridden/deleted manually)
-    assignments = ContributionClusterAssignment.objects.filter(
+    # Reactivate assignments created by this batch
+    ContributionClusterAssignment.objects.filter(
         contribution__raw_contribution__import_batch=batch
-    )
-    for assign in assignments:
-        assign.is_active = True
-        assign.save()
+    ).update(is_active=True)
         
     # Log event
     AuditEvent.objects.create(
@@ -736,27 +691,66 @@ def restore_batch(batch_id, actor="SYSTEM"):
 @transaction.atomic
 def purge_batch(batch_id, actor="SYSTEM"):
     """
-    Exceptional administrative action to permanently delete all data from a batch.
-    This is only runnable from CLI/tests.
+    Core service helper to execute a transaction-atomic purge of batch data.
+    Only deletes clusters or entities when they are completely orphaned.
     """
     batch = ImportBatch.objects.get(id=batch_id)
     
-    # We delete normalized contributions, which cascades to assignments, locations, and raw contributions
+    # Collect affected clusters/entities before deleting contribution records
+    affected_clusters = list(ContributionCluster.objects.filter(
+        assignments__contribution__raw_contribution__import_batch=batch
+    ).distinct())
+    
+    affected_entities = list(ContributorEntity.objects.filter(
+        clusters__in=affected_clusters
+    ).distinct())
+    
+    # Delete batch data (normalized contributions, raw contributions, and active assignments)
     Contribution.objects.filter(raw_contribution__import_batch=batch).delete()
     RawContribution.objects.filter(import_batch=batch).delete()
     
-    # Clean up empty clusters/entities
-    empty_clusters = ContributionCluster.objects.filter(assignments__isnull=True)
-    for cluster in empty_clusters:
-        entity = cluster.contributor_entity
-        cluster.delete()
-        if entity.clusters.count() == 0:
-            entity.delete()
+    deleted_clusters = 0
+    deleted_entities = 0
+    
+    # 1. Clean up orphaned clusters
+    for cluster in affected_clusters:
+        # Check surviving assignments (active or inactive lineage), merge decisions, and match decisions
+        has_assignments = cluster.assignments.exists()
+        
+        # MergeDecision model check
+        from roster.models import MergeDecision, MatchDecision
+        has_merge_decisions = MergeDecision.objects.filter(Q(source_cluster=cluster) | Q(target_cluster=cluster)).exists()
+        has_match_decisions = MatchDecision.objects.filter(contribution_cluster=cluster).exists()
+        
+        # If completely orphaned, delete the cluster
+        if not (has_assignments or has_merge_decisions or has_match_decisions):
+            cluster.delete()
+            deleted_clusters += 1
             
+    # 2. Clean up orphaned entities
+    for entity in affected_entities:
+        # An entity is orphaned if it has no clusters remaining, and no manual overrides/verification
+        has_clusters = entity.clusters.exists()
+        has_manual_overrides = MembershipAssessment.objects.filter(contributor_entity=entity, manual_override=True).exists()
+        
+        if not (has_clusters or has_manual_overrides or entity.is_verified):
+            # Clean Person and Organization profile extensions
+            Person.objects.filter(contributor_entity=entity).delete()
+            Organization.objects.filter(contributor_entity=entity).delete()
+            entity.delete()
+            deleted_entities += 1
+            
+    # Record metadata before deletion
+    file_name = batch.file_name
+    file_hash = batch.file_hash
+    batch_row_count = batch.row_count
+    
     batch.delete()
     
-    AuditEvent.objects.create(
-        event_type="PURGE_BATCH",
-        description=f"Permanently purged batch {batch_id}.",
-        actor=actor
-    )
+    return {
+        'file_name': file_name,
+        'file_hash': file_hash,
+        'raw_count': batch_row_count,
+        'deleted_clusters': deleted_clusters,
+        'deleted_entities': deleted_entities
+    }

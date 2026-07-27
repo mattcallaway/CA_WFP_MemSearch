@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Geographic Ambiguity Queue</h1>
+        <p class="subtitle is-6">Resolve ambiguous, conflicting, or unmatched contributor address locations</p>
+
+        {% if not resolutions %}
+        <div class="notification is-success is-light has-text-centered py-5">
+            <span class="icon"><i class="fas fa-check-circle"></i></span>
+            <span>All geographic locations are successfully resolved! The queue is clean.</span>
+        </div>
+        {% else %}
+        <div class="columns is-multiline mt-5">
+            {% for item in resolutions %}
+            <div class="column is-6">
+                <div class="card mb-4" style="border-left: 5px solid #ffdd57;">
+                    <header class="card-header">
+                        <p class="card-header-title">
+                            Location #{{ item.loc_id }} &bull; Match Type: <span class="has-text-warning ml-2">{{ item.match_method }}</span>
+                        </p>
+                    </header>
+                    <div class="card-content">
+                        <div class="content mb-4">
+                            <table class="table is-narrow is-fullwidth is-bordered">
+                                <tbody>
+                                    <tr>
+                                        <th>Observed Address</th>
+                                        <td>
+                                            <strong>{{ item.observed_city }}, {{ item.observed_state }} {{ item.observed_zip }}</strong>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>Street Address</th>
+                                        <td><code>{{ item.street_address }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Contributor Name</th>
+                                        <td><code>{{ item.contributor_name }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Ambiguity Details</th>
+                                        <td>{{ item.explanation }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Manual Resolution Form -->
+                        <form action="{% url 'geography_manual_resolve' item.res_id %}" method="post">
+                            {% csrf_token %}
+                            <div class="field">
+                                <label class="label is-small">Select Resolved Reference Candidate</label>
+                                <div class="control">
+                                    <div class="select is-small is-fullwidth">
+                                        <select name="county_id" required>
+                                            <option value="">-- Choose County --</option>
+                                            {% for cand in item.candidates %}
+                                                {% if cand.candidate_county %}
+                                                <option value="{{ cand.candidate_county.id }}">
+                                                    County: {{ cand.candidate_county.display_name }} ({{ cand.confidence }} Confidence)
+                                                </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="columns">
+                                <div class="column is-6">
+                                    <div class="field">
+                                        <div class="control">
+                                            <div class="select is-small is-fullwidth">
+                                                <select name="place_id">
+                                                    <option value="">-- Optional Place --</option>
+                                                    {% for cand in item.candidates %}
+                                                        {% if cand.candidate_place %}
+                                                        <option value="{{ cand.candidate_place.id }}">
+                                                            Place: {{ cand.candidate_place.canonical_name }}
+                                                        </option>
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="column is-6">
+                                    <div class="field">
+                                        <div class="control">
+                                            <div class="select is-small is-fullwidth">
+                                                <select name="postal_id">
+                                                    <option value="">-- Optional ZIP --</option>
+                                                    {% for cand in item.candidates %}
+                                                        {% if cand.candidate_postal_area %}
+                                                        <option value="{{ cand.candidate_postal_area.id }}">
+                                                            ZIP: {{ cand.candidate_postal_area.postal_code }}
+                                                        </option>
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <div class="control">
+                                    <input class="input is-small" type="text" name="explanation" placeholder="Reason for override..." required>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-small is-link is-fullwidth">
+                                        Submit Manual Override Decision
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

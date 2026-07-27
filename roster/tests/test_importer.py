@@ -172,15 +172,15 @@ class ImporterTestCase(TestCase):
         
         # Test 1: Actor not superuser fails
         with self.assertRaises(CommandError) as ctx:
-            call_command('purge_batch', batch_id=batch.id, actor="normaluser", confirm=True)
+            call_command('purge_batch', batch_id=batch.id, actor="normaluser", confirm=True, production_confirm=True)
         self.assertIn("not a superuser", str(ctx.exception))
         
         # Test 2: Dry run does not delete
-        call_command('purge_batch', batch_id=batch.id, actor="superadmin", dry_run=True, confirm=True)
+        call_command('purge_batch', batch_id=batch.id, actor="superadmin", dry_run=True, confirm=True, production_confirm=True)
         self.assertTrue(ImportBatch.objects.filter(id=batch.id).exists())
         
         # Test 3: Actual purge deletes all records
-        call_command('purge_batch', batch_id=batch.id, actor="superadmin", confirm=True)
+        call_command('purge_batch', batch_id=batch.id, actor="superadmin", confirm=True, production_confirm=True)
         self.assertFalse(ImportBatch.objects.filter(id=batch.id).exists())
         self.assertFalse(Contribution.objects.filter(raw_contribution__import_batch=batch).exists())
         self.assertFalse(RawContribution.objects.filter(import_batch=batch).exists())

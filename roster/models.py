@@ -89,6 +89,11 @@ class ContributorEntity(models.Model):
             ("view_audit", "Can view audit provenance records"),
             ("export_sensitive_data", "Can export sensitive roster data"),
             ("purge_data", "Can permanently purge data from CLI"),
+            ("view_geography_reference", "Can view reference geography maps and lists"),
+            ("import_geography_reference", "Can import geographic reference datasets"),
+            ("manage_geography_reference", "Can manage and activate geographic references"),
+            ("rollback_geography_import", "Can roll back and restore geographic imports"),
+            ("resolve_geography_ambiguity", "Can resolve ambiguous or conflicting contributor locations"),
         ]
 
     def __str__(self):
@@ -284,6 +289,16 @@ class Location(models.Model):
     is_inferred = models.BooleanField(default=False)
     is_manual = models.BooleanField(default=False)
 
+    # Geography Stage 2A Cache Fields
+    matched_place = models.ForeignKey('GeographicPlace', on_delete=models.SET_NULL, null=True, blank=True, related_name='locations')
+    matched_postal_area = models.ForeignKey('PostalArea', on_delete=models.SET_NULL, null=True, blank=True, related_name='locations')
+    matched_county = models.ForeignKey('County', on_delete=models.SET_NULL, null=True, blank=True, related_name='locations')
+    geography_dataset = models.ForeignKey('GeographyDataset', on_delete=models.SET_NULL, null=True, blank=True, related_name='locations')
+    match_method = models.CharField(max_length=50, blank=True, null=True)
+    geo_confidence = models.CharField(max_length=50, blank=True, null=True)
+    geo_ambiguity_status = models.CharField(max_length=50, default='UNRESOLVED')
+    geo_explanation = models.TextField(blank=True, null=True)
+
     def __str__(self):
         return f"Loc: {self.city}, {self.state} {self.zip} ({self.precision_level})"
 
@@ -406,3 +421,490 @@ class ImportAttempt(models.Model):
 
     def __str__(self):
         return f"Attempt {self.id} on Batch {self.import_batch_id} - {self.action}"
+
+class GeographyDataset(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('ACTIVE', 'Active'),
+        ('SUPERSEDED', 'Superseded'),
+        ('FAILED', 'Failed'),
+        ('ROLLED_BACK', 'Rolled Back'),
+    ]
+
+    name = models.CharField(max_length=255)
+    dataset_type = models.CharField(max_length=50)
+    source_organization = models.CharField(max_length=255, blank=True)
+    source_description = models.TextField(blank=True)
+    version = models.CharField(max_length=50)
+    effective_date = models.DateField(null=True, blank=True)
+    obtained_date = models.DateField(null=True, blank=True)
+    file_name = models.CharField(max_length=255)
+    file_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    authority_level = models.IntegerField(default=100)
+    resolver_priority = models.IntegerField(default=100)
+    notes = models.TextField(blank=True)
+    imported_by = models.CharField(max_length=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} (v{self.version} - {self.status})"
+
+class GeographyMappingProfile(models.Model):
+    name = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=50)
+    version = models.CharField(max_length=50, default='1.0')
+    mapping_rules = models.JSONField(help_text="Header mappings")
+    normalization_rules = models.JSONField(default=dict, blank=True)
+    validation_rules = models.JSONField(default=dict, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} (v{self.version})"
+
+class GeographyImportBatch(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('VALIDATING', 'Validating'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('ROLLED_BACK', 'Rolled Back'),
+    ]
+
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE, related_name='import_batches')
+    file_name = models.CharField(max_length=255)
+    file_hash = models.CharField(max_length=64, unique=True)
+    import_type = models.CharField(max_length=50)
+    mapping_profile_version = models.CharField(max_length=50, blank=True)
+    row_count = models.IntegerField(default=0)
+    successful_rows = models.IntegerField(default=0)
+    warning_rows = models.IntegerField(default=0)
+    failed_rows = models.IntegerField(default=0)
+    duplicate_rows = models.IntegerField(default=0)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    actor = models.CharField(max_length=150)
+    started_time = models.DateTimeField(auto_now_add=True)
+    completed_time = models.DateTimeField(null=True, blank=True)
+    rollback_state = models.CharField(max_length=50, default='ACTIVE')
+    error_summary = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"GeoBatch: {self.file_name} ({self.status})"
+
+class RawGeographyRecord(models.Model):
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE, related_name='raw_records')
+    row_number = models.IntegerField()
+    original_values = models.JSONField()
+    raw_row_hash = models.CharField(max_length=64, db_index=True)
+    validation_status = models.CharField(max_length=50, default='UNPROCESSED')
+    validation_errors = models.TextField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['import_batch', 'validation_status'], name='idx_raw_geo_batch_status'),
+        ]
+
+    def __str__(self):
+        return f"RawGeo: Batch {self.import_batch_id} Row {self.row_number}"
+
+class County(models.Model):
+    state_code = models.CharField(max_length=2, default='CA')
+    normalized_name = models.CharField(max_length=100, db_index=True)
+    display_name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name_plural = "counties"
+
+    def __str__(self):
+        return f"{self.display_name}, {self.state_code}"
+
+class GeographicPlace(models.Model):
+    state_code = models.CharField(max_length=2, default='CA')
+    canonical_name = models.CharField(max_length=100)
+    normalized_name = models.CharField(max_length=100, db_index=True)
+    general_category = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    def __str__(self):
+        return f"{self.canonical_name} ({self.general_category}), {self.state_code}"
+
+class PostalArea(models.Model):
+    postal_code = models.CharField(max_length=20, db_index=True)
+    postal_area_type = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    def __str__(self):
+        return f"{self.postal_code} ({self.postal_area_type})"
+
+class CountySourceRecord(models.Model):
+    county = models.ForeignKey(County, on_delete=models.CASCADE, related_name='source_records')
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    source_id = models.CharField(max_length=100, blank=True)
+    source_name = models.CharField(max_length=100)
+    state_fips = models.CharField(max_length=2, blank=True)
+    county_fips_component = models.CharField(max_length=3, blank=True)
+    county_geoid = models.CharField(max_length=5, blank=True)
+    ansi_code = models.CharField(max_length=50, blank=True)
+    gnis_id = models.CharField(max_length=50, blank=True)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='ACTIVE')
+
+    def __str__(self):
+        return f"CountySource: {self.source_name} in Dataset {self.dataset_id}"
+
+class PlaceSourceRecord(models.Model):
+    place = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, related_name='source_records')
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    source_id = models.CharField(max_length=100, blank=True)
+    source_name = models.CharField(max_length=100)
+    place_type = models.CharField(max_length=100, blank=True)
+    state_fips = models.CharField(max_length=2, blank=True)
+    place_fips_component = models.CharField(max_length=5, blank=True)
+    place_geoid = models.CharField(max_length=7, blank=True)
+    ansi_code = models.CharField(max_length=50, blank=True)
+    gnis_id = models.CharField(max_length=50, blank=True)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='ACTIVE')
+
+    def __str__(self):
+        return f"PlaceSource: {self.source_name} in Dataset {self.dataset_id}"
+
+class PostalAreaSourceRecord(models.Model):
+    postal_area = models.ForeignKey(PostalArea, on_delete=models.CASCADE, related_name='source_records')
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    source_code = models.CharField(max_length=20)
+    source_type = models.CharField(max_length=50)
+    display_name = models.CharField(max_length=100, blank=True)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='ACTIVE')
+
+    def __str__(self):
+        return f"PostalSource: {self.source_code} in Dataset {self.dataset_id}"
+
+class GeographyIdentifier(models.Model):
+    SCHEME_CHOICES = [
+        ('STATE_FIPS', 'State FIPS'),
+        ('COUNTY_FIPS_COMPONENT', 'County FIPS Component'),
+        ('COUNTY_GEOID', 'County GEOID'),
+        ('PLACE_FIPS_COMPONENT', 'Place FIPS Component'),
+        ('PLACE_GEOID', 'Place GEOID'),
+        ('ANSI', 'ANSI'),
+        ('GNIS', 'GNIS'),
+        ('USPS_ZIP', 'USPS ZIP'),
+        ('CENSUS_ZCTA', 'Census ZCTA'),
+        ('SOURCE_SPECIFIC', 'Source Specific'),
+    ]
+
+    county_target = models.ForeignKey(County, on_delete=models.CASCADE, null=True, blank=True, related_name='identifiers')
+    place_target = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, null=True, blank=True, related_name='identifiers')
+    postal_target = models.ForeignKey(PostalArea, on_delete=models.CASCADE, null=True, blank=True, related_name='identifiers')
+    scheme = models.CharField(max_length=50, choices=SCHEME_CHOICES)
+    component_designation = models.CharField(max_length=50, blank=True)
+    value = models.CharField(max_length=100, db_index=True)
+    issuing_authority = models.CharField(max_length=100, blank=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (models.Q(county_target__isnull=False) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=True)) |
+                    (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=False) & models.Q(postal_target__isnull=True)) |
+                    (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=False))
+                ),
+                name="exactly_one_target_identifier"
+            )
+        ]
+
+    def __str__(self):
+        return f"Identifier: {self.scheme}={self.value}"
+
+class PlaceCountyAssociation(models.Model):
+    BASIS_CHOICES = [
+        ('POPULATION', 'Population'),
+        ('RESIDENTIAL_ADDRESS', 'Residential Address'),
+        ('TOTAL_ADDRESS', 'Total Address'),
+        ('HOUSING_UNIT', 'Housing Unit'),
+        ('LAND_AREA', 'Land Area'),
+        ('SOURCE_DEFINED', 'Source Defined'),
+        ('UNKNOWN', 'Unknown'),
+    ]
+
+    place = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, related_name='county_associations')
+    county = models.ForeignKey(County, on_delete=models.CASCADE, related_name='place_associations')
+    relationship_type = models.CharField(max_length=50)
+    confidence = models.CharField(max_length=50)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    normalized_weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    weight_basis = models.CharField(max_length=50, choices=BASIS_CHOICES, default='UNKNOWN')
+    weight_unit = models.CharField(max_length=50, blank=True)
+    raw_weight_value = models.CharField(max_length=100, blank=True)
+    normalization_rule = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['place', 'county', 'dataset'],
+                condition=models.Q(is_active=True),
+                name='unique_active_place_county_association'
+            ),
+            models.CheckConstraint(
+                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                name='range_place_county_normalized_weight'
+            )
+        ]
+
+    def __str__(self):
+        return f"PlaceCounty: {self.place.canonical_name} -> {self.county.display_name}"
+
+class PostalCountyAssociation(models.Model):
+    BASIS_CHOICES = [
+        ('POPULATION', 'Population'),
+        ('RESIDENTIAL_ADDRESS', 'Residential Address'),
+        ('TOTAL_ADDRESS', 'Total Address'),
+        ('HOUSING_UNIT', 'Housing Unit'),
+        ('LAND_AREA', 'Land Area'),
+        ('SOURCE_DEFINED', 'Source Defined'),
+        ('UNKNOWN', 'Unknown'),
+    ]
+
+    postal_area = models.ForeignKey(PostalArea, on_delete=models.CASCADE, related_name='county_associations')
+    county = models.ForeignKey(County, on_delete=models.CASCADE, related_name='postal_associations')
+    relationship_type = models.CharField(max_length=50)
+    confidence = models.CharField(max_length=50)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    normalized_weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    weight_basis = models.CharField(max_length=50, choices=BASIS_CHOICES, default='UNKNOWN')
+    weight_unit = models.CharField(max_length=50, blank=True)
+    raw_weight_value = models.CharField(max_length=100, blank=True)
+    normalization_rule = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['postal_area', 'county', 'dataset'],
+                condition=models.Q(is_active=True),
+                name='unique_active_postal_county_association'
+            ),
+            models.CheckConstraint(
+                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                name='range_postal_county_normalized_weight'
+            )
+        ]
+
+    def __str__(self):
+        return f"PostalCounty: {self.postal_area.postal_code} -> {self.county.display_name}"
+
+class PostalPlaceAssociation(models.Model):
+    BASIS_CHOICES = [
+        ('POPULATION', 'Population'),
+        ('RESIDENTIAL_ADDRESS', 'Residential Address'),
+        ('TOTAL_ADDRESS', 'Total Address'),
+        ('HOUSING_UNIT', 'Housing Unit'),
+        ('LAND_AREA', 'Land Area'),
+        ('SOURCE_DEFINED', 'Source Defined'),
+        ('UNKNOWN', 'Unknown'),
+    ]
+
+    postal_area = models.ForeignKey(PostalArea, on_delete=models.CASCADE, related_name='place_associations')
+    place = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, related_name='postal_associations')
+    relationship_type = models.CharField(max_length=50)
+    confidence = models.CharField(max_length=50)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    normalized_weight_value = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    weight_basis = models.CharField(max_length=50, choices=BASIS_CHOICES, default='UNKNOWN')
+    weight_unit = models.CharField(max_length=50, blank=True)
+    raw_weight_value = models.CharField(max_length=100, blank=True)
+    normalization_rule = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['postal_area', 'place', 'dataset'],
+                condition=models.Q(is_active=True),
+                name='unique_active_postal_place_association'
+            ),
+            models.CheckConstraint(
+                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                name='range_postal_place_normalized_weight'
+            )
+        ]
+
+    def __str__(self):
+        return f"PostalPlace: {self.postal_area.postal_code} -> {self.place.canonical_name}"
+
+class GeographyAlias(models.Model):
+    SCHEME_CHOICES = [
+        ('OFFICIAL_ALTERNATE', 'Official Alternate'),
+        ('COMMON_NAME', 'Common Name'),
+        ('HISTORICAL_NAME', 'Historical Name'),
+        ('POSTAL_CITY', 'Postal City Label'),
+        ('ABBREVIATION', 'Abbreviation'),
+        ('SOURCE_SPECIFIC', 'Source Specific'),
+    ]
+
+    alias_type = models.CharField(max_length=50, choices=SCHEME_CHOICES)
+    original_alias = models.CharField(max_length=255)
+    normalized_alias = models.CharField(max_length=255, db_index=True)
+    county_target = models.ForeignKey(County, on_delete=models.CASCADE, null=True, blank=True, related_name='aliases')
+    place_target = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, null=True, blank=True, related_name='aliases')
+    postal_target = models.ForeignKey(PostalArea, on_delete=models.CASCADE, null=True, blank=True, related_name='aliases')
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    import_batch = models.ForeignKey(GeographyImportBatch, on_delete=models.CASCADE)
+    raw_record = models.ForeignKey(RawGeographyRecord, on_delete=models.SET_NULL, null=True, blank=True)
+    source_description = models.CharField(max_length=255, blank=True)
+    effective_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (models.Q(county_target__isnull=False) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=True)) |
+                    (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=False) & models.Q(postal_target__isnull=True)) |
+                    (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=False))
+                ),
+                name="exactly_one_target_alias"
+            )
+        ]
+
+    def __str__(self):
+        return f"Alias: {self.original_alias} -> Type {self.alias_type}"
+
+class GeographyResolutionRun(models.Model):
+    TRIGGER_CHOICES = [
+        ('POST_CONTRIBUTION_IMPORT', 'Post Contribution Import'),
+        ('DATASET_ACTIVATION', 'Dataset Activation'),
+        ('MANUAL_BULK_RESOLUTION', 'Manual Bulk Resolution'),
+        ('SINGLE_LOCATION_REVIEW', 'Single Location Review'),
+    ]
+
+    trigger_type = models.CharField(max_length=50, choices=TRIGGER_CHOICES)
+    resolver_version = models.CharField(max_length=50, default='1.0')
+    scope = models.CharField(max_length=255, blank=True)
+    actor = models.CharField(max_length=150)
+    status = models.CharField(max_length=50, default='PENDING', db_index=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolution_runs')
+    locations_considered = models.IntegerField(default=0)
+    resolved_count = models.IntegerField(default=0)
+    ambiguous_count = models.IntegerField(default=0)
+    conflict_count = models.IntegerField(default=0)
+    unmatched_count = models.IntegerField(default=0)
+    started_time = models.DateTimeField(auto_now_add=True)
+    completed_time = models.DateTimeField(null=True, blank=True)
+    error_summary = models.TextField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['dataset', 'scope'],
+                condition=models.Q(status='PENDING'),
+                name='unique_pending_run_per_dataset_and_scope'
+            )
+        ]
+
+    def __str__(self):
+        return f"ResolutionRun {self.id} ({self.trigger_type} - {self.status})"
+
+class LocationGeographyResolution(models.Model):
+    STATUS_CHOICES = [
+        ('CURRENT', 'Current'),
+        ('SUPERSEDED', 'Superseded'),
+        ('REVOKED', 'Revoked'),
+    ]
+
+    METHOD_CHOICES = [
+        ('UNRESOLVED', 'Unresolved'),
+        ('EXACT_PLACE_ZIP_MATCH', 'Exact Place and ZIP Match'),
+        ('EXACT_ALIAS_ZIP_MATCH', 'Exact Alias and ZIP Match'),
+        ('UNIQUE_ZIP_INFERENCE', 'Unique ZIP Inference'),
+        ('AMBIGUOUS_PLACE', 'Ambiguous Place'),
+        ('AMBIGUOUS_ALIAS', 'Ambiguous Alias'),
+        ('AMBIGUOUS_ZIP', 'Ambiguous ZIP'),
+        ('CONFLICTING_SOURCE_VALUES', 'Conflicting Source Values'),
+        ('MANUALLY_RESOLVED', 'Manually Resolved'),
+        ('NO_REFERENCE_MATCH', 'No Reference Match'),
+    ]
+
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='resolutions')
+    resolution_run = models.ForeignKey(GeographyResolutionRun, on_delete=models.CASCADE, related_name='resolutions')
+    observed_city = models.CharField(max_length=100)
+    observed_state = models.CharField(max_length=50)
+    observed_zip = models.CharField(max_length=20)
+    matched_canonical_county = models.ForeignKey(County, on_delete=models.SET_NULL, null=True, blank=True)
+    matched_canonical_place = models.ForeignKey(GeographicPlace, on_delete=models.SET_NULL, null=True, blank=True)
+    matched_postal_area = models.ForeignKey(PostalArea, on_delete=models.SET_NULL, null=True, blank=True)
+    match_method = models.CharField(max_length=50, choices=METHOD_CHOICES)
+    confidence = models.CharField(max_length=50)
+    explanation = models.TextField(blank=True)
+    origin = models.CharField(max_length=50, default='AUTOMATIC')
+    actor = models.CharField(max_length=150, blank=True)
+    created_time = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='CURRENT', db_index=True)
+    superseded_resolution = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='supersedes')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['location'],
+                condition=models.Q(status='CURRENT'),
+                name='unique_current_resolution_per_location'
+            )
+        ]
+
+    def __str__(self):
+        return f"Resolution for Loc {self.location_id} ({self.match_method} - {self.status})"
+
+class GeographyResolutionCandidate(models.Model):
+    STATUS_CHOICES = [
+        ('ACCEPTED', 'Accepted'),
+        ('REJECTED', 'Rejected'),
+        ('PENDING', 'Pending'),
+    ]
+
+    location_resolution = models.ForeignKey(LocationGeographyResolution, on_delete=models.CASCADE, related_name='candidates')
+    candidate_county = models.ForeignKey(County, on_delete=models.CASCADE, null=True, blank=True)
+    candidate_place = models.ForeignKey(GeographicPlace, on_delete=models.CASCADE, null=True, blank=True)
+    candidate_postal_area = models.ForeignKey(PostalArea, on_delete=models.CASCADE, null=True, blank=True)
+    supporting_rule = models.CharField(max_length=255, blank=True)
+    dataset = models.ForeignKey(GeographyDataset, on_delete=models.CASCADE)
+    confidence = models.CharField(max_length=50)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING')
+    explanation = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Candidate for Res {self.location_resolution_id}"

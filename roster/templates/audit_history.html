@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}System Audit Logs - WFP MemSearch{% endblock %}
+
+{% block content %}
+<div class="box">
+    <div class="level">
+        <div class="level-left">
+            <div>
+                <h1 class="title is-3">System Audit Logs</h1>
+                <p class="subtitle is-6">Historical record of all import, identity, and membership actions.</p>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+                <tr>
+                    <th style="width: 200px;">Timestamp</th>
+                    <th style="width: 180px;">Event Type</th>
+                    <th>Description</th>
+                    <th style="width: 150px;">Actor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr>
+                    <td class="is-size-7">{{ event.timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td>
+                        <span class="tag 
+                            {% if event.event_type == 'IMPORT_BATCH' %}is-info
+                            {% elif event.event_type == 'ROLLBACK_BATCH' %}is-warning
+                            {% elif event.event_type == 'RESTORE_BATCH' %}is-success
+                            {% elif event.event_type == 'PURGE_BATCH' %}is-danger
+                            {% elif event.event_type == 'MANUAL_OVERRIDE' %}is-primary
+                            {% elif event.event_type == 'MERGE_CLUSTERS' or event.event_type == 'SPLIT_CLUSTER' %}is-link
+                            {% elif event.event_type == 'CORRECT_ENTITY_TYPE' %}is-dark
+                            {% else %}is-light
+                            {% endif %}">
+                            {{ event.event_type }}
+                        </span>
+                    </td>
+                    <td>{{ event.description }}</td>
+                    <td class="has-text-weight-bold">{{ event.actor }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="has-text-centered has-text-grey">No audit events found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Counties Directory</h1>
+        <p class="subtitle is-6">Canonical reference list of California Counties</p>
+
+        <div class="card mt-5">
+            <div class="card-content">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>FIPS / ANSI (Matched Identifier)</th>
+                            <th>County Name</th>
+                            <th>Normalized Name</th>
+                            <th>State Code</th>
+                            <th>Active Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for county in counties %}
+                        <tr>
+                            <td>
+                                {% for identifier in county.identifiers.all %}
+                                    <span class="tag is-light">{{ identifier.scheme }}: {{ identifier.value }}</span>
+                                {% empty %}
+                                    <span class="has-text-grey">-</span>
+                                {% endfor %}
+                            </td>
+                            <td><strong>{{ county.display_name }}</strong></td>
+                            <td><code>{{ county.normalized_name }}</code></td>
+                            <td>{{ county.state_code }}</td>
+                            <td>
+                                <span class="tag {% if county.is_active %}is-success is-light{% else %}is-danger is-light{% endif %}">
+                                    {% if county.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="has-text-centered has-text-grey py-5">
+                                No canonical counties found in active reference datasets.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

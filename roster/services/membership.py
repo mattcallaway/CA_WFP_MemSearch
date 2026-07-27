@@ -222,7 +222,7 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
         contribution_cluster__contributor_entity_id__in=entity_ids,
         is_active=True,
         contribution__raw_contribution__import_batch__status='COMPLETED'
-    ).select_related('contribution', 'contribution_cluster')
+    ).select_related('contribution', 'contribution__raw_contribution', 'contribution_cluster')
     
     entity_contribs = {}
     for assign in assignments:

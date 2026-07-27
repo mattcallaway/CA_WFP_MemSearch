@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Geographic Aliases</h1>
+        <p class="subtitle is-6">Aliases, common names, historical labels, and postal abbreviations</p>
+
+        <div class="card mt-5">
+            <div class="card-content">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Original Alias Name</th>
+                            <th>Normalized Alias</th>
+                            <th>Alias Type</th>
+                            <th>Target Canonical Record</th>
+                            <th>Active Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alias in aliases %}
+                        <tr>
+                            <td><strong>{{ alias.original_alias }}</strong></td>
+                            <td><code>{{ alias.normalized_alias }}</code></td>
+                            <td><span class="tag is-info is-light">{{ alias.alias_type }}</span></td>
+                            <td>
+                                {% if alias.county_target %}
+                                    <span class="tag is-primary">County: {{ alias.county_target.display_name }}</span>
+                                {% elif alias.place_target %}
+                                    <span class="tag is-link">Place: {{ alias.place_target.canonical_name }}</span>
+                                {% elif alias.postal_target %}
+                                    <span class="tag is-dark">Postal: {{ alias.postal_target.postal_code }}</span>
+                                {% else %}
+                                    <span class="has-text-grey">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="tag {% if alias.is_active %}is-success is-light{% else %}is-danger is-light{% endif %}">
+                                    {% if alias.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="has-text-centered has-text-grey py-5">
+                                No geographic aliases found in active datasets.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -15,6 +15,19 @@ This is a secure, transaction-first, private web application designed to turn Ca
 
 ---
 
+## Stage 2A & 2A.1 Geography Features
+
+- **Bounded Chunk Ingestion**: Geographic crosswalk files are processed in chunks of 500 rows. Leveraging database bulk inserts and chunk-level relationship pre-checks reduces SQL ingestion queries by over 97%.
+- **Phase-by-Phase Query Profiling**: Integrates a lightweight `QueryProfiler` context wrapper to log query counts per phase without memory-intensive query logs.
+- **Hardened ZIP Normalization**: Implements conservative normalization where 4-digit ZIP inputs are left unpadded (triggering `POSSIBLE_TRUNCATED_LEADING_ZERO` validation flags) unless explicitly authorized by the frozen mapping snapshot.
+- **Range-constrained Weight Normalization**: Supports fractional and percentage weight normalizations with a strict database check constraint validating normalized values in range `[0.0, 1.0]`.
+- **Decoupled Activation & Pending Proposals**: Dataset activation commits independently, logs audit events, and registers a pending resolution proposal.
+- **Scoped Resolver Engine**: Grouping locations into 500-unit chunks, the resolver loads candidate places, postal areas, aliases, and associations matching only that chunk's keys.
+- **Cache Rebuild CLI Command**: Reconstructs Location cached geographic attributes from authoritative current resolutions. Clears stale cache values when no resolution exists and reports multiple-current-resolution corruption.
+- **PII Data Leak Protection**: Applies database-level `.values()` projections for geographers without roster permissions to prevent loading or hydrating sensitive personal data.
+
+---
+
 ## Directory Structure
 
 ```
@@ -98,3 +111,20 @@ To permanently delete an import batch and all cascades (use only under administr
 python manage.py shell -c "from roster.services.importer import purge_batch; purge_batch(<batch_id>, actor='ADMIN')"
 ```
 This physically purges RawContribution, Contribution, locations, and batch records. Normal web-based rollbacks are non-destructive.
+
+---
+
+## Rebuild Geography Cache Command
+
+To rebuild cached geographic fields on `Location` records from authoritative current resolutions:
+```bash
+python manage.py rebuild_location_geography_cache [--dry-run] [--actor <username>] [--location-ids <id1> <id2> ...] [--run-id <id>]
+```
+Options:
+- `--dry-run`: Preview updates without committing changes to the database.
+- `--actor`: Log a custom actor name in the audit event.
+- `--location-ids`: Limit the rebuild to specific location IDs.
+- `--run-id`: Limit the rebuild to locations resolved in a specific resolution run.
+
+Stale locations with no current resolution will have their cache cleared, and any locations with multiple current resolutions (indicating database corruption) will be reported and skipped without changes.
+

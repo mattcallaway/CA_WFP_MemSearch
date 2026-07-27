@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="title">Places Directory</h1>
+        <p class="subtitle is-6">Canonical reference list of California cities, towns, and places</p>
+
+        <div class="card mt-5">
+            <div class="card-content">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Place Name</th>
+                            <th>Normalized Name</th>
+                            <th>Place Category / Type</th>
+                            <th>State</th>
+                            <th>County Associations</th>
+                            <th>Active Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for place in places %}
+                        <tr>
+                            <td><strong>{{ place.canonical_name }}</strong></td>
+                            <td><code>{{ place.normalized_name }}</code></td>
+                            <td><span class="tag is-info is-light">{{ place.general_category }}</span></td>
+                            <td>{{ place.state_code }}</td>
+                            <td>
+                                {% for assoc in place.county_associations.all %}
+                                    {% if assoc.is_active %}
+                                        <span class="tag is-light">{{ assoc.county.display_name }}</span>
+                                    {% endif %}
+                                {% empty %}
+                                    <span class="has-text-grey">-</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <span class="tag {% if place.is_active %}is-success is-light{% else %}is-danger is-light{% endif %}">
+                                    {% if place.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="has-text-centered has-text-grey py-5">
+                                No canonical places found in active reference datasets.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

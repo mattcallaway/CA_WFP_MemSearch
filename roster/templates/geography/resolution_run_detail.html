@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'geography_datasets_list' %}">Geography</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Resolution Run Detail</a></li>
+            </ul>
+        </nav>
+
+        <div class="card mt-5">
+            <header class="card-header">
+                <p class="card-header-title">Geographic Resolution Run #{{ run.id }}</p>
+            </header>
+            <div class="card-content">
+                <div class="content">
+                    <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth">
+                        <tbody>
+                            <tr>
+                                <th>Run ID</th>
+                                <td>{{ run.id }}</td>
+                            </tr>
+                            <tr>
+                                <th>Trigger Type</th>
+                                <td><span class="tag is-info">{{ run.trigger_type }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>Status</th>
+                                <td><span class="tag is-success">{{ run.status }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>Actor</th>
+                                <td><code>{{ run.actor }}</code></td>
+                            </tr>
+                            <tr>
+                                <th>Locations Considered</th>
+                                <td>{{ run.locations_considered }}</td>
+                            </tr>
+                            <tr>
+                                <th>Resolved</th>
+                                <td class="has-text-success">{{ run.resolved_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Ambiguous</th>
+                                <td class="has-text-warning">{{ run.ambiguous_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Conflicting</th>
+                                <td class="has-text-danger">{{ run.conflict_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Unmatched</th>
+                                <td class="has-text-grey">{{ run.unmatched_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Started</th>
+                                <td>{{ run.started_time|date:"Y-m-d H:i:s" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Completed</th>
+                                <td>{{ run.completed_time|date:"Y-m-d H:i:s" }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
