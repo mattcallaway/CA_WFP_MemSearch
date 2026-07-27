@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero is-small mb-5">
+    <div class="hero-body">
+        <h1 class="title is-3">Map CSV Columns</h1>
+        <p class="subtitle is-6">Batch File: <strong>{{ batch.file_name }}</strong></p>
+    </div>
+</section>
+
+<!-- Preview Data Table -->
+<div class="columns">
+    <div class="column is-12">
+        <div class="card p-5 mb-5" style="overflow-x: auto;">
+            <h3 class="title is-5 mb-3">CSV Rows Preview (First 5 Rows)</h3>
+            <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth">
+                <thead>
+                    <tr>
+                        {% for header in headers %}
+                            <th>{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview_rows %}
+                        <tr>
+                            {% for cell in row %}
+                                <td>{{ cell }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="{{ headers|length }}" class="has-text-centered py-4">No preview rows available.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Column Mapping Selection Form -->
+<div class="columns is-centered">
+    <div class="column is-8">
+        <div class="card p-5">
+            <h3 class="title is-5 mb-4">Define Column Mapping</h3>
+            <form action="{% url 'imports_process' batch.id %}" method="post">
+                {% csrf_token %}
+                
+                <!-- Quick Load Mapping Profile -->
+                {% if mapping_profiles %}
+                <div class="field mb-5">
+                    <label class="label">Quick-load Saved Mapping Profile</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select id="profileLoader">
+                                <option value="">-- Select a Profile --</option>
+                                {% for prof in mapping_profiles %}
+                                    <option value="{{ prof.id }}" data-rules='{{ prof.mapping_rules|json_script:"mapping-rules" }}'>
+                                        {{ prof.name }} (v{{ prof.version }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Variables Mapping List -->
+                <table class="table is-fullwidth is-striped">
+                    <thead>
+                        <tr>
+                            <th>WFP Target Field</th>
+                            <th>CSV Source Column</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for field in target_fields %}
+                        <tr>
+                            <td>
+                                <strong>{{ field }}</strong>
+                                {% if field == 'NAME OF CONTRIBUTOR' or field == 'AMOUNT' or field == 'TRANSACTION DATE' %}
+                                    <span class="has-text-danger">* Required</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="select is-fullwidth">
+                                    <select name="csv_columns[]" class="mapping-select" data-target="{{ field }}">
+                                        <option value="">-- Choose Column --</option>
+                                        {% for header in headers %}
+                                            <option value="{{ header }}">{{ header }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <input type="hidden" name="target_fields[]" value="{{ field }}">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <hr>
+
+                <!-- Profile Saving Options -->
+                <div class="field mt-4">
+                    <label class="label">Save Mapping Profile (Optional)</label>
+                    <div class="control">
+                        <input class="input" type="text" name="save_profile_name" placeholder="Enter profile name to save rules for future imports">
+                    </div>
+                </div>
+
+                <div class="field mt-5">
+                    <button type="submit" class="button is-link is-large is-fullwidth">Validate and Run Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Auto-mapping heuristics based on string matching
+        const selects = document.querySelectorAll('.mapping-select');
+        selects.forEach(select => {
+            const target = select.getAttribute('data-target').toUpperCase();
+            
+            for (let i = 0; i < select.options.length; i++) {
+                const optVal = select.options[i].value.toUpperCase();
+                
+                // Direct match
+                if (optVal === target) {
+                    select.selectedIndex = i;
+                    break;
+                }
+                
+                // Common abbreviations
+                if (target === 'NAME OF CONTRIBUTOR' && (optVal.includes('NAME') || optVal.includes('CONTRIBUTOR'))) {
+                    select.selectedIndex = i;
+                }
+                if (target === 'ZIP' && (optVal === 'ZIP' || optVal.includes('POSTAL'))) {
+                    select.selectedIndex = i;
+                }
+                if (target === 'TRANSACTION DATE' && (optVal.includes('DATE') && !optVal.includes('FILE'))) {
+                    select.selectedIndex = i;
+                }
+                if (target === 'FILED DATE' && (optVal.includes('FILE') && optVal.includes('DATE'))) {
+                    select.selectedIndex = i;
+                }
+                if (target === 'AMOUNT' && (optVal.includes('AMT') || optVal.includes('AMOUNT'))) {
+                    select.selectedIndex = i;
+                }
+                if (target === 'TRANSACTION NUMBER' && (optVal.includes('TXN') || optVal.includes('TRANSACTION') || optVal.includes('NUMBER'))) {
+                    select.selectedIndex = i;
+                }
+            }
+        });
+
+        // Mapping loader handler
+        const loader = document.getElementById('profileLoader');
+        if (loader) {
+            loader.addEventListener('change', () => {
+                const selectedOpt = loader.options[loader.selectedIndex];
+                if (!selectedOpt.value) return;
+                
+                // Get the mapping rules JSON
+                const rulesText = selectedOpt.text;
+                // Look for script tags containing json logic
+                // For simplicity, we can load from backend or look up mapping rules
+                // Instead of client-side JSON parsing of complex attributes, we mapped it in data tag
+                // Let's implement a direct match loader.
+                // We'll query JSON rules from data-rules if we want, or do direct match.
+            });
+        }
+    });
+</script>
+{% endblock %}

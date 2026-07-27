@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero is-small mb-5">
+    <div class="hero-body">
+        <h1 class="title is-3">CSV Imports</h1>
+        <p class="subtitle is-6">Upload Secretary of State CSV files, map headers, and manage transaction rollbacks.</p>
+    </div>
+</section>
+
+<div class="columns">
+    <!-- Upload Form -->
+    <div class="column is-4">
+        <div class="card p-5">
+            <h3 class="title is-5 mb-4">Upload New CSV File</h3>
+            <form action="{% url 'imports_upload' %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="field">
+                    <div class="file is-normal is-boxed is-centered is-link">
+                        <label class="file-label">
+                            <input class="file-input" type="file" name="csv_file" accept=".csv" required id="fileInput">
+                            <span class="file-cta">
+                                <span class="file-label">
+                                    Choose a CSV file...
+                                </span>
+                            </span>
+                            <span class="file-name" id="fileName">
+                                No file selected
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                <div class="field mt-4">
+                    <button type="submit" class="button is-link is-fullwidth">Upload and Preview</button>
+                </div>
+                <p class="help has-text-grey mt-2">Maximum file size: 10MB. Allowed format: .csv</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Batch Logs -->
+    <div class="column is-8">
+        <div class="card p-5">
+            <h3 class="title is-5 mb-4">Import Batch Logs</h3>
+            <div style="overflow-x: auto;">
+                <table class="table is-fullwidth is-striped">
+                    <thead>
+                        <tr>
+                            <th>Batch ID / File Name</th>
+                            <th>Date / Author</th>
+                            <th>Row Breakdown</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for batch in batches %}
+                        <tr>
+                            <td>
+                                <strong>{{ batch.file_name }}</strong><br>
+                                <span class="has-text-grey-light is-size-7" title="{{ batch.file_hash }}">SHA-256: {{ batch.file_hash|slice:":12" }}...</span>
+                            </td>
+                            <td>
+                                <span class="is-size-7">{{ batch.import_date|date:"Y-m-d H:i" }}</span><br>
+                                <span class="is-size-7">By: {{ batch.imported_by }}</span>
+                            </td>
+                            <td>
+                                <span class="tag is-info is-light">Total: {{ batch.row_count }}</span>
+                                <span class="tag is-success is-light">Valid: {{ batch.successful_rows }}</span><br>
+                                <span class="tag is-warning is-light">Dups: {{ batch.duplicate_rows }}</span>
+                                <span class="tag is-danger is-light">Errors: {{ batch.failed_rows }}</span>
+                            </td>
+                            <td>
+                                <span class="tag 
+                                    {% if batch.status == 'COMPLETED' %}is-success
+                                    {% elif batch.status == 'ROLLED_BACK' %}is-light
+                                    {% elif batch.status == 'FAILED' %}is-danger
+                                    {% else %}is-warning{% endif %}">
+                                    {{ batch.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="buttons">
+                                    {% if batch.failed_rows > 0 or batch.duplicate_rows > 0 %}
+                                        <a href="{% url 'imports_failures' batch.id %}" class="button is-small is-warning is-light" title="View Failures & Warnings">
+                                            Log
+                                        </a>
+                                    {% endif %}
+                                    
+                                    {% if batch.status == 'COMPLETED' %}
+                                        <form action="{% url 'imports_rollback' batch.id %}" method="post" onsubmit="return confirm('Are you sure you want to roll back this batch? All normalized transactions and derived membership assessments will be deactivated non-destructively.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="button is-small is-danger is-light">Roll Back</button>
+                                        </form>
+                                    {% elif batch.status == 'ROLLED_BACK' %}
+                                        <form action="{% url 'imports_restore' batch.id %}" method="post" onsubmit="return confirm('Restore this rolled-back batch? Active transactions and derived membership assessments will be reactivated.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="button is-small is-success is-light">Restore</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="has-text-centered has-text-grey py-4">No CSV imports registered.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Simple file selector name display
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    if (fileInput && fileName) {
+        fileInput.onchange = () => {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = fileInput.files[0].name;
+            }
+        };
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="columns is-centered">
+    <div class="column is-4">
+        <div class="card mt-6">
+            <div class="card-content">
+                <h3 class="title is-4 has-text-centered has-text-grey-darker">Sign In</h3>
+                <p class="subtitle is-6 has-text-centered mb-5">California WFP MemSearch Roster</p>
+
+                <form method="post" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                        <div class="notification is-danger is-light">
+                            {% for error in form.non_field_errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="field">
+                        <label class="label">Username</label>
+                        <div class="control">
+                            <input class="input" type="text" name="username" required autofocus placeholder="Enter your username">
+                        </div>
+                        {% if form.username.errors %}
+                            <p class="help is-danger">{{ form.username.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="field">
+                        <label class="label">Password</label>
+                        <div class="control">
+                            <input class="input" type="password" name="password" required placeholder="Enter your password">
+                        </div>
+                        {% if form.password.errors %}
+                            <p class="help is-danger">{{ form.password.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="field mt-5">
+                        <button type="submit" class="button is-link is-fullwidth">Sign In</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

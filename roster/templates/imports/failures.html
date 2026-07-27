@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero is-small mb-5">
+    <div class="hero-body">
+        <h1 class="title is-3">Import Failures & Warnings</h1>
+        <p class="subtitle is-6">File: <strong>{{ batch.file_name }}</strong></p>
+    </div>
+</section>
+
+<div class="mb-4">
+    <a href="{% url 'imports_list' %}" class="button is-small is-light">&larr; Back to Imports</a>
+</div>
+
+<div class="card p-5">
+    <h3 class="title is-5 mb-4">Validation Logs</h3>
+    
+    <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+            <tr>
+                <th style="width: 80px;">Row #</th>
+                <th>Contributor Name</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Issue / Warning Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fail in failures %}
+            <tr>
+                <td><strong>{{ fail.row_number }}</strong></td>
+                <td>{{ fail.original_values.NAME_OF_CONTRIBUTOR|default:fail.original_values.NAME|default:"Unknown" }}</td>
+                <td>{{ fail.original_values.AMOUNT|default:"-" }}</td>
+                <td>{{ fail.original_values.TRANSACTION_DATE|default:fail.original_values.DATE|default:"-" }}</td>
+                <td>
+                    <span class="tag 
+                        {% if fail.validation_status == 'VALIDATION_FAILURE' %}is-danger
+                        {% elif fail.validation_status == 'EXACT_DUPLICATE' %}is-warning is-light
+                        {% else %}is-info is-light{% endif %}">
+                        {{ fail.validation_status }}
+                    </span>
+                </td>
+                <td>
+                    <p class="has-text-grey-dark is-size-7"><strong>{{ fail.validation_errors }}</strong></p>
+                    <details class="mt-1">
+                        <summary class="is-size-7 has-text-link" style="cursor: pointer;">Show full raw values</summary>
+                        <pre class="is-size-7 p-2 mt-1 has-background-white-bis" style="max-height: 150px; overflow-y: auto;">{{ fail.original_values }}</pre>
+                    </details>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="has-text-centered has-text-grey py-4">No failures or warnings found for this batch.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

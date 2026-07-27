@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero is-small mb-5">
+    <div class="hero-body">
+        <div class="container">
+            <h1 class="title is-3">Dashboard</h1>
+            <p class="subtitle is-6">California Secretary of State Contribution & Membership Roster Summary</p>
+        </div>
+    </div>
+</section>
+
+<!-- Aggregates Grid -->
+<div class="columns is-multiline">
+    <div class="column is-3">
+        <div class="card has-background-white p-4">
+            <p class="heading has-text-grey">Total Volume</p>
+            <p class="title is-3 has-text-link">${{ total_volume|floatformat:2 }}</p>
+            <p class="subtitle is-7 has-text-grey">{{ total_transactions }} total transactions</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="card has-background-white p-4">
+            <p class="heading has-text-grey">Unique People</p>
+            <p class="title is-3 has-text-info">{{ unique_people }}</p>
+            <p class="subtitle is-7 has-text-grey">Individuals parsed</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="card has-background-white p-4">
+            <p class="heading has-text-grey">Import Failures</p>
+            <p class="title is-3 has-text-danger">{{ failed_rows }}</p>
+            <p class="subtitle is-7 has-text-grey">Excluded from roster</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="card has-background-white p-4">
+            <p class="heading has-text-grey">Exact Duplicates</p>
+            <p class="title is-3 has-text-warning">{{ duplicate_rows }}</p>
+            <p class="subtitle is-7 has-text-grey">Excluded from totals</p>
+        </div>
+    </div>
+</div>
+
+<!-- Membership Roster Breakdown -->
+<div class="columns">
+    <div class="column is-12">
+        <div class="card p-5">
+            <h4 class="title is-5 mb-4">Membership Roster Status Breakdown</h4>
+            <div class="columns is-multiline">
+                <div class="column is-3">
+                    <div class="notification is-success is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Active Members</p>
+                        <p class="title is-4">{{ status_counts.ACTIVE }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-info is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Provisional Members</p>
+                        <p class="title is-4">{{ status_counts.PROVISIONAL }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-warning is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Likely Members</p>
+                        <p class="title is-4">{{ status_counts.LIKELY }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-danger is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Lapsed Members</p>
+                        <p class="title is-4">{{ status_counts.LAPSED }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-primary is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Previously Recurring (Stale)</p>
+                        <p class="title is-4">{{ status_counts.PREVIOUSLY_RECURRING }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-light has-text-centered py-3 mb-2" style="background-color:#e2d9f3;">
+                        <p class="heading" style="color:#7749b5;">One-Time Donors</p>
+                        <p class="title is-4" style="color:#7749b5;">{{ status_counts.ONE_TIME }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Dataset Too Stale</p>
+                        <p class="title is-4">{{ status_counts.DATASET_TOO_STALE }}</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="notification is-dark is-light has-text-centered py-3 mb-2">
+                        <p class="heading">Unknown Status</p>
+                        <p class="title is-4">{{ status_counts.UNKNOWN }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Imports -->
+<div class="columns">
+    <div class="column is-12">
+        <div class="card p-5">
+            <h4 class="title is-5 mb-4">Recent CSV Upload Batches</h4>
+            <table class="table is-fullwidth is-striped is-hoverable">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Imported By</th>
+                        <th>Import Date</th>
+                        <th>Total Rows</th>
+                        <th>Valid Rows</th>
+                        <th>Failed Rows</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for batch in recent_imports %}
+                    <tr>
+                        <td><strong>{{ batch.file_name }}</strong></td>
+                        <td>{{ batch.imported_by }}</td>
+                        <td>{{ batch.import_date|date:"Y-m-d H:i" }}</td>
+                        <td>{{ batch.row_count }}</td>
+                        <td>{{ batch.successful_rows }}</td>
+                        <td>
+                            {% if batch.failed_rows > 0 %}
+                                <a href="{% url 'imports_failures' batch.id %}" class="has-text-danger">
+                                    {{ batch.failed_rows }} failures / warnings
+                                </a>
+                            {% else %}
+                                0
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="tag 
+                                {% if batch.status == 'COMPLETED' %}is-success
+                                {% elif batch.status == 'ROLLED_BACK' %}is-light
+                                {% else %}is-warning{% endif %}">
+                                {{ batch.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="has-text-centered has-text-grey py-4">No CSV batches imported yet. Go to <a href="{% url 'imports_list' %}">CSV Imports</a> to upload one.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

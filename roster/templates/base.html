@@ -1,0 +1,152 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WFP MemSearch - CA Working Families Party</title>
+    <!-- Serves all assets locally -->
+    <link rel="stylesheet" href="{% static 'vendor/css/bulma.min.css' %}">
+    <script src="{% static 'vendor/js/htmx.min.js' %}"></script>
+    <style>
+        body {
+            background-color: #f5f8fa;
+            font-family: BlinkMacSystemFont, -apple-system, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        }
+        .navbar {
+            background-color: #1a2d54; /* Deep dark blue for WFP branding */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-item, .navbar-link {
+            color: #ffffff !important;
+            font-weight: 500;
+        }
+        .navbar-item:hover, .navbar-link:hover {
+            background-color: #263e6e !important;
+            color: #ffffff !important;
+        }
+        .navbar-brand .navbar-item {
+            font-weight: bold;
+            font-size: 1.25rem;
+            letter-spacing: 0.5px;
+        }
+        .hero {
+            background: linear-gradient(135deg, #1a2d54 0%, #263e6e 100%);
+            color: white;
+            border-bottom: 4px solid #eb5e28; /* WFP accent color */
+        }
+        .hero .title {
+            color: white;
+        }
+        .hero .subtitle {
+            color: #d1d5db;
+        }
+        .footer {
+            background-color: #1a2d54;
+            color: #d1d5db;
+            padding: 2rem 1.5rem 2rem;
+            margin-top: 4rem;
+        }
+        .footer strong {
+            color: #ffffff;
+        }
+        .card {
+            border-radius: 6px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .tag-active { background-color: #48c78e !important; color: white !important; }
+        .tag-provisional { background-color: #3e8ed0 !important; color: white !important; }
+        .tag-likely { background-color: #ffe08a !important; color: #947600 !important; }
+        .tag-lapsed { background-color: #f14668 !important; color: white !important; }
+        .tag-onetime { background-color: #9b51e0 !important; color: white !important; }
+        .tag-stale { background-color: #a0aec0 !important; color: white !important; }
+        .tag-unknown { background-color: #718096 !important; color: white !important; }
+    </style>
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <nav class="navbar" role="navigation" aria-label="main navigation">
+        <div class="container">
+            <div class="navbar-brand">
+                <a class="navbar-item" href="{% url 'dashboard' %}">
+                    <span>CA WFP MemSearch</span>
+                </a>
+                <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navMenu">
+                    <span aria-hidden="true"></span>
+                    <span aria-hidden="true"></span>
+                    <span aria-hidden="true"></span>
+                </a>
+            </div>
+
+            <div id="navMenu" class="navbar-menu">
+                <div class="navbar-start">
+                    <a class="navbar-item" href="{% url 'dashboard' %}">
+                        Dashboard
+                    </a>
+                    <a class="navbar-item" href="{% url 'imports_list' %}">
+                        CSV Imports
+                    </a>
+                    <a class="navbar-item" href="{% url 'people_list' %}">
+                        Roster Directory
+                    </a>
+                </div>
+
+                <div class="navbar-end">
+                    <div class="navbar-item">
+                        <span class="has-text-grey-light mr-3">Signed in as: <strong>{{ user.username }}</strong></span>
+                        <div class="buttons">
+                            <form action="{% url 'logout' %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="button is-danger is-light is-small">Log out</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container mt-4" style="min-height: 80vh;">
+        {% if messages %}
+            <div class="columns">
+                <div class="column is-12">
+                    {% for message in messages %}
+                        <div class="notification {% if message.tags == 'error' %}is-danger{% else %}is-{{ message.tags }}{% endif %} is-light">
+                            <button class="delete" onclick="this.parentElement.style.display='none';"></button>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="footer">
+        <div class="content has-text-centered">
+            <p>
+                <strong>CA Working Families Party</strong> &bull; Secure Membership Database &bull; Stage 1
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Simple Bulma burger toggle
+        document.addEventListener('DOMContentLoaded', () => {
+            const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+            if ($navbarBurgers.length > 0) {
+                $navbarBurgers.forEach( el => {
+                    el.addEventListener('click', () => {
+                        const target = el.dataset.target;
+                        const $target = document.getElementById(target);
+                        el.classList.toggle('is-active');
+                        $target.classList.toggle('is-active');
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>

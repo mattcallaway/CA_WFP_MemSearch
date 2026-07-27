@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero is-small mb-5">
+    <div class="hero-body">
+        <h1 class="title is-3">Roster Directory</h1>
+        <p class="subtitle is-6">Search, filter, and audit Working Families Party contributor profiles and membership records.</p>
+    </div>
+</section>
+
+<!-- Search & Filter Controls -->
+<div class="card p-5 mb-5">
+    <form method="get" action="{% url 'people_list' %}">
+        <div class="columns">
+            <div class="column is-6">
+                <div class="field">
+                    <label class="label">Search Contributor Directory</label>
+                    <div class="control">
+                        <input class="input" type="text" name="q" value="{{ query }}" placeholder="Search by name, city, ZIP, employer, occupation, transaction #...">
+                    </div>
+                </div>
+            </div>
+            <div class="column is-4">
+                <div class="field">
+                    <label class="label">Filter by Membership Status</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select name="status">
+                                <option value="">All Statuses</option>
+                                {% for val, label in statuses %}
+                                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-2">
+                <div class="field">
+                    <label class="label">&nbsp;</label>
+                    <button type="submit" class="button is-link is-fullwidth">Search</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Merge Profiles Form -->
+<div class="columns">
+    <div class="column is-12">
+        <div class="card p-4 mb-5 has-background-white-bis">
+            <h4 class="title is-6 mb-3">Merge Duplicate Contributor Profiles</h4>
+            <form action="{% url 'merge_profiles' %}" method="post" onsubmit="return confirm('Merge these profiles? All associated contribution clusters will be linked to the target entity, and their timelines will be aggregated.');">
+                {% csrf_token %}
+                <div class="columns">
+                    <div class="column is-5">
+                        <div class="field">
+                            <label class="label is-size-7">Source Profile (to be merged and deactivated)</label>
+                            <div class="control">
+                                <div class="select is-fullwidth is-small">
+                                    <select name="source_entity_id" required>
+                                        <option value="">-- Choose Profile --</option>
+                                        {% for person in people %}
+                                            <option value="{{ person.entity.id }}">{{ person.entity.display_name }} ({{ person.city }} / {{ person.zip_code }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-5">
+                        <div class="field">
+                            <label class="label is-size-7">Target Profile (to absorb the source contributions)</label>
+                            <div class="control">
+                                <div class="select is-fullwidth is-small">
+                                    <select name="target_entity_id" required>
+                                        <option value="">-- Choose Profile --</option>
+                                        {% for person in people %}
+                                            <option value="{{ person.entity.id }}">{{ person.entity.display_name }} ({{ person.city }} / {{ person.zip_code }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-2">
+                        <div class="field">
+                            <label class="label is-size-7">&nbsp;</label>
+                            <button type="submit" class="button is-small is-link is-fullwidth mt-1">Merge Profiles</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- People Directory Table -->
+<div class="card p-5">
+    <div style="overflow-x: auto;">
+        <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+                <tr>
+                    <th>Display Name</th>
+                    <th>Locality</th>
+                    <th>Membership Status</th>
+                    <th>Recurring Amt</th>
+                    <th>Last Date</th>
+                    <th>Total Given</th>
+                    <th>Txns</th>
+                    <th>Flags</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in people %}
+                <tr>
+                    <td>
+                        <strong>{{ row.entity.display_name }}</strong>
+                        {% if row.entity.is_verified %}
+                            <span class="has-text-success" title="Administratively Verified">&#10004;</span>
+                        {% else %}
+                            <span class="has-text-grey-light" title="Provisional Roster Profile">&#9888;</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ row.city }} {{ row.zip_code }}
+                    </td>
+                    <td>
+                        <span class="tag 
+                            {% if row.status == 'ACTIVE' %}tag-active
+                            {% elif row.status == 'PROVISIONAL' %}tag-provisional
+                            {% elif row.status == 'LIKELY' %}tag-likely
+                            {% elif row.status == 'LAPSED' %}tag-lapsed
+                            {% elif row.status == 'ONE_TIME' %}tag-onetime
+                            {% elif row.status == 'DATASET_TOO_STALE' %}tag-stale
+                            {% else %}tag-unknown{% endif %}">
+                            {{ row.status }}
+                        </span>
+                    </td>
+                    <td>${{ row.recurring_amount|floatformat:2 }}</td>
+                    <td>{{ row.last_contribution|date:"Y-m-d"|default:"-" }}</td>
+                    <td>${{ row.total_contributed|floatformat:2 }}</td>
+                    <td>{{ row.contribution_count }}</td>
+                    <td>
+                        {% for flag in row.flags %}
+                            <span class="tag is-small is-warning is-light">{{ flag }}</span>
+                        {% empty %}
+                            -
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <a href="{% url 'person_profile' row.entity.id %}" class="button is-small is-info is-outlined">
+                            View Profile
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="has-text-centered has-text-grey py-4">No contributors found in directory.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

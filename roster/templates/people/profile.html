@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'people_list' %}" class="button is-small is-light">&larr; Back to Directory</a>
+</div>
+
+<div class="columns">
+    <!-- Profile Info & Membership Assessments -->
+    <div class="column is-4">
+        <div class="card p-5 mb-5">
+            <h2 class="title is-4 mb-2">
+                {{ entity.display_name }}
+                {% if entity.is_verified %}
+                    <span class="has-text-success" title="Verified">&#10004;</span>
+                {% else %}
+                    <span class="has-text-grey-light" title="Provisional">&#9888;</span>
+                {% endif %}
+            </h2>
+            <p class="subtitle is-6 mb-4">Entity Type: <strong>{{ entity.entity_type }}</strong></p>
+
+            <hr>
+
+            <!-- Membership Assessment Status -->
+            <div class="field">
+                <label class="label">Inferred Membership Status</label>
+                <div class="control">
+                    <span class="tag is-large 
+                        {% if latest_assessment.calculated_status == 'ACTIVE' %}tag-active
+                        {% elif latest_assessment.calculated_status == 'PROVISIONAL' %}tag-provisional
+                        {% elif latest_assessment.calculated_status == 'LIKELY' %}tag-likely
+                        {% elif latest_assessment.calculated_status == 'LAPSED' %}tag-lapsed
+                        {% elif latest_assessment.calculated_status == 'ONE_TIME' %}tag-onetime
+                        {% elif latest_assessment.calculated_status == 'DATASET_TOO_STALE' %}tag-stale
+                        {% else %}tag-unknown{% endif %}">
+                        {{ latest_assessment.get_calculated_status_display|default:latest_assessment.calculated_status }}
+                    </span>
+                </div>
+            </div>
+
+            {% if latest_assessment.explanation %}
+                <article class="message is-info is-light mt-3">
+                    <div class="message-body is-size-7 py-2 px-3">
+                        {{ latest_assessment.explanation }}
+                    </div>
+                </article>
+            {% endif %}
+
+            <hr>
+
+            <!-- Manual Override Form -->
+            <h4 class="title is-6 mb-3">Apply Manual Status Override</h4>
+            <form action="{% url 'membership_override' entity.id %}" method="post">
+                {% csrf_token %}
+                <div class="field">
+                    <div class="control">
+                        <div class="select is-fullwidth is-small">
+                            <select name="status" required>
+                                <option value="ACTIVE">Active Member</option>
+                                <option value="PROVISIONAL">New or Provisional Member</option>
+                                <option value="LIKELY">Likely Member</option>
+                                <option value="LAPSED">Lapsed Member</option>
+                                <option value="ONE_TIME">One-Time Donor</option>
+                                <option value="UNKNOWN">Unknown</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="control">
+                        <textarea class="textarea is-small" name="explanation" rows="2" placeholder="Reason for override..." required></textarea>
+                    </div>
+                </div>
+                <div class="field">
+                    <button type="submit" class="button is-small is-link is-fullwidth">Override Status</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Location Profile list -->
+        <div class="card p-5 mb-5">
+            <h3 class="title is-5 mb-3">Known Locations</h3>
+            <div class="content is-size-7">
+                {% for loc in locations %}
+                <div class="box py-2 px-3 mb-2 {% if loc.status == 'CURRENT' %}has-background-white{% else %}has-background-light{% endif %}">
+                    <p class="mb-0"><strong>{{ loc.city }}, {{ loc.state }} {{ loc.zip }}</strong></p>
+                    {% if loc.street_address %}
+                        <p class="mb-0 has-text-grey">{{ loc.street_address }}</p>
+                    {% endif %}
+                    <p class="is-size-7 has-text-grey-light mb-0">
+                        Precision: {{ loc.precision_level }} | Status: {{ loc.status }}<br>
+                        Source: {{ loc.source }}
+                    </p>
+                </div>
+                {% empty %}
+                <p class="has-text-grey">No location records associated.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline & Merges -->
+    <div class="column is-8">
+        <!-- Roster Summary metrics -->
+        <div class="columns is-multiline">
+            <div class="column is-4">
+                <div class="card p-4 has-text-centered">
+                    <p class="heading">Gross Total</p>
+                    <p class="title is-4 has-text-success">${{ total_contributed|floatformat:2 }}</p>
+                </div>
+            </div>
+            <div class="column is-4">
+                <div class="card p-4 has-text-centered">
+                    <p class="heading">Net Total (Refunds deducted)</p>
+                    <p class="title is-4 has-text-info">${{ net_contributed|floatformat:2 }}</p>
+                </div>
+            </div>
+            <div class="column is-4">
+                <div class="card p-4 has-text-centered">
+                    <p class="heading">Total Transactions</p>
+                    <p class="title is-4">{{ contribution_count }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Merges management -->
+        {% if merge_decisions %}
+        <div class="card p-5 mb-5 has-background-warning-light">
+            <h3 class="title is-5 mb-3 has-text-warning-dark">Active Merges Associated With This Profile</h3>
+            <table class="table is-fullwidth is-narrow has-background-warning-light">
+                <thead>
+                    <tr>
+                        <th>Source Cluster</th>
+                        <th>Target Cluster</th>
+                        <th>Merged By</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dec in merge_decisions %}
+                    <tr>
+                        <td>{{ dec.source_cluster.normalized_name }} (ZIP: {{ dec.source_cluster.zip_code }})</td>
+                        <td>{{ dec.target_cluster.normalized_name }} (ZIP: {{ dec.target_cluster.zip_code }})</td>
+                        <td>{{ dec.merged_by }}</td>
+                        <td>
+                            <form action="{% url 'split_profiles' dec.id %}" method="post" onsubmit="return confirm('Split these profiles? Timelines will be separated back to their original states.');">
+                                {% csrf_token %}
+                                <button type="submit" class="button is-small is-danger is-light">Split / Undo</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Contributions Timeline -->
+        <div class="card p-5 mb-5">
+            <h3 class="title is-5 mb-4">Contribution Timeline</h3>
+            <div style="overflow-x: auto;">
+                <table class="table is-fullwidth is-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Original Contributor Name</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Employer / Occupation</th>
+                            <th>Txn Number</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in timeline %}
+                        <tr class="{% if item.contribution.amount < 0 %}has-background-danger-light{% endif %}">
+                            <td>{{ item.contribution.transaction_date|date:"Y-m-d" }}</td>
+                            <td>
+                                <strong>{{ item.raw_name }}</strong><br>
+                                <span class="is-size-7 has-text-grey-light">Batch: {{ item.contribution.raw_contribution.import_batch.file_name }}</span>
+                            </td>
+                            <td>
+                                <strong class="{% if item.contribution.amount < 0 %}has-text-danger{% else %}has-text-success{% endif %}">
+                                    ${{ item.contribution.amount|floatformat:2 }}
+                                </strong>
+                            </td>
+                            <td>
+                                <span class="tag is-small 
+                                    {% if item.contribution.transaction_type == 'CONTRIBUTION' %}is-success is-light
+                                    {% elif item.contribution.transaction_type == 'REFUND' %}is-danger
+                                    {% else %}is-warning is-light{% endif %}">
+                                    {{ item.contribution.transaction_type }}
+                                </span>
+                            </td>
+                            <td class="is-size-7">
+                                {{ item.contribution.employer|default:"-" }}<br>
+                                <span class="has-text-grey">{{ item.contribution.occupation|default:"-" }}</span>
+                            </td>
+                            <td>
+                                <span class="is-size-7">{{ item.contribution.transaction_number|default:"-" }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="has-text-centered has-text-grey py-4">No transactions found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Audit Log History -->
+        <div class="card p-5">
+            <h3 class="title is-5 mb-3">Audit Logs (Provenance)</h3>
+            <div class="content is-size-7">
+                <ul>
+                    {% for event in audit_events %}
+                        <li>
+                            <strong>{{ event.event_type }}</strong> &bull; {{ event.timestamp|date:"Y-m-d H:i" }} &bull; By: {{ event.actor }}<br>
+                            <span class="has-text-grey">{{ event.description }}</span>
+                        </li>
+                    {% empty %}
+                        <p class="has-text-grey">No audit event logs found.</p>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
