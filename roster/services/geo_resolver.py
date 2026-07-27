@@ -208,23 +208,28 @@ def run_resolution_chunks(run, locations, actor):
                 loc.geo_explanation = explanation
                 locations_to_update.append(loc)
 
-            # Insert resolutions and candidates
-            for res_obj, cands in resolutions_to_create:
-                res_obj.save()
-                for cand in cands:
-                    candidates_to_create.append(
-                        GeographyResolutionCandidate(
-                            location_resolution=res_obj,
-                            candidate_county=cand.get('county'),
-                            candidate_place=cand.get('place'),
-                            candidate_postal_area=cand.get('postal'),
-                            supporting_rule=cand.get('rule', ''),
-                            dataset=cand.get('dataset'),
-                            confidence=cand.get('confidence', 'LOW'),
-                            status=cand.get('status', 'PENDING'),
-                            explanation=cand.get('explanation', '')
+            # Bulk create resolution records first to get their IDs
+            to_insert_res = [res_obj for res_obj, cands in resolutions_to_create]
+            if to_insert_res:
+                inserted_res = LocationGeographyResolution.objects.bulk_create(to_insert_res)
+                
+                # Create candidates with correct resolution foreign keys
+                for index, (res_obj, cands) in enumerate(resolutions_to_create):
+                    db_res_id = inserted_res[index].id
+                    for cand in cands:
+                        candidates_to_create.append(
+                            GeographyResolutionCandidate(
+                                location_resolution_id=db_res_id,
+                                candidate_county=cand.get('county'),
+                                candidate_place=cand.get('place'),
+                                candidate_postal_area=cand.get('postal'),
+                                supporting_rule=cand.get('rule', ''),
+                                dataset=cand.get('dataset'),
+                                confidence=cand.get('confidence', 'LOW'),
+                                status=cand.get('status', 'PENDING'),
+                                explanation=cand.get('explanation', '')
+                            )
                         )
-                    )
 
             if candidates_to_create:
                 GeographyResolutionCandidate.objects.bulk_create(candidates_to_create)
