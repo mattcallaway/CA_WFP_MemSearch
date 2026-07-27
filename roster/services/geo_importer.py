@@ -178,7 +178,13 @@ def import_geography_file(file_path, file_name, dataset_id, actor, override_dupl
         seen_row_hashes = set()
         county_cache = {c.normalized_name: c for c in County.objects.filter(is_active=True)}
         place_cache = {p.normalized_name: p for p in GeographicPlace.objects.filter(is_active=True)}
-        postal_cache = {p.postal_code: p for p in PostalArea.objects.filter(is_active=True)}
+        # Resolve postal area type from mapping snapshot profile rules
+        postal_type = 'USPS_ZIP5'
+        if profile:
+            postal_type = profile.mapping_rules.get('POSTAL_AREA_TYPE') or profile.normalization_rules.get('POSTAL_AREA_TYPE') or 'USPS_ZIP5'
+        postal_type = postal_type.upper()
+
+        postal_cache = {p.postal_code: p for p in PostalArea.objects.filter(postal_area_type=postal_type, is_active=True)}
 
         success_count = 0
         warning_count = 0
@@ -284,6 +290,12 @@ def import_geography_file(file_path, file_name, dataset_id, actor, override_dupl
                         if county_val:
                             chunk_counties_needed.add(county_val.upper().replace(' COUNTY', '').strip())
 
+                # Resolve postal area type from mapping snapshot profile rules
+                postal_type = 'USPS_ZIP5'
+                if profile:
+                    postal_type = profile.mapping_rules.get('POSTAL_AREA_TYPE') or profile.normalization_rules.get('POSTAL_AREA_TYPE') or 'USPS_ZIP5'
+                postal_type = postal_type.upper()
+
                 # 5. Canonical lookup
                 if profiler: profiler.start_phase("canonical_lookup")
                 missing_counties = chunk_counties_needed - set(county_cache.keys())
@@ -300,7 +312,7 @@ def import_geography_file(file_path, file_name, dataset_id, actor, override_dupl
 
                 missing_postals = chunk_postals_needed - set(postal_cache.keys())
                 if missing_postals:
-                    db_postals = PostalArea.objects.filter(postal_code__in=missing_postals, is_active=True)
+                    db_postals = PostalArea.objects.filter(postal_code__in=missing_postals, postal_area_type=postal_type, is_active=True)
                     for po in db_postals:
                         postal_cache[po.postal_code] = po
 
@@ -324,10 +336,10 @@ def import_geography_file(file_path, file_name, dataset_id, actor, override_dupl
 
                 new_postals = []
                 for code in (chunk_postals_needed - set(postal_cache.keys())):
-                    new_postals.append(PostalArea(postal_code=code, postal_area_type='USPS_ZIP5', is_active=True))
+                    new_postals.append(PostalArea(postal_code=code, postal_area_type=postal_type, is_active=True))
                 if new_postals:
                     PostalArea.objects.bulk_create(new_postals)
-                    for po in PostalArea.objects.filter(postal_code__in=[np.postal_code for np in new_postals]):
+                    for po in PostalArea.objects.filter(postal_code__in=[np.postal_code for np in new_postals], postal_area_type=postal_type):
                         postal_cache[po.postal_code] = po
 
                 # Mappings and validation

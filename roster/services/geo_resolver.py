@@ -13,10 +13,12 @@ def chunk_list(lst, chunk_size):
     for i in range(0, len(lst), chunk_size):
         yield lst[i:i + chunk_size]
 
-def execute_pending_resolution_run(run_id, actor):
+def execute_pending_resolution_run(run_id, actor, authorized_types=None):
     """
     Executes a previously created pending resolution run proposal.
     """
+    if authorized_types is None:
+        authorized_types = ['USPS_ZIP5']
     try:
         run = GeographyResolutionRun.objects.get(id=run_id)
     except GeographyResolutionRun.DoesNotExist:
@@ -40,7 +42,7 @@ def execute_pending_resolution_run(run_id, actor):
         run.locations_considered = len(locations)
         run.save()
 
-        resolved, ambiguous, conflict, unmatched = run_resolution_chunks(run, locations, actor)
+        resolved, ambiguous, conflict, unmatched = run_resolution_chunks(run, locations, actor, authorized_types=authorized_types)
 
         run.status = 'COMPLETED'
         run.resolved_count = resolved
@@ -71,10 +73,12 @@ def execute_pending_resolution_run(run_id, actor):
 
     return run
 
-def resolve_geographic_locations(actor, trigger_type='MANUAL_BULK_RESOLUTION', location_ids=None):
+def resolve_geographic_locations(actor, trigger_type='MANUAL_BULK_RESOLUTION', location_ids=None, authorized_types=None):
     """
     Triggers a new geographic resolution run.
     """
+    if authorized_types is None:
+        authorized_types = ['USPS_ZIP5']
     active_datasets = list(GeographyDataset.objects.filter(status='ACTIVE'))
     
     scope = f"bulk_{timezone.now().date()}" if not location_ids else f"locations_{len(location_ids)}"
@@ -88,12 +92,14 @@ def resolve_geographic_locations(actor, trigger_type='MANUAL_BULK_RESOLUTION', l
             status='PENDING'
         )
         
-    return execute_pending_resolution_run(run.id, actor)
+    return execute_pending_resolution_run(run.id, actor, authorized_types=authorized_types)
 
-def run_resolution_chunks(run, locations, actor):
+def run_resolution_chunks(run, locations, actor, authorized_types=None):
     """
     Resolves locations in scoped chunks. Each chunk runs inside its own transaction.
     """
+    if authorized_types is None:
+        authorized_types = ['USPS_ZIP5']
     active_datasets = list(GeographyDataset.objects.filter(status='ACTIVE'))
     resolved = 0
     ambiguous = 0
@@ -121,7 +127,7 @@ def run_resolution_chunks(run, locations, actor):
             for p in place_candidates_list:
                 place_cache.setdefault(p.normalized_name, []).append(p)
 
-            postal_cache = {p.postal_code: p for p in PostalArea.objects.filter(postal_code__in=observed_zips, is_active=True)}
+            postal_cache = {p.postal_code: p for p in PostalArea.objects.filter(postal_code__in=observed_zips, postal_area_type__in=authorized_types, is_active=True)}
 
             alias_candidates_list = GeographyAlias.objects.filter(
                 normalized_alias__in=observed_cities, is_active=True, dataset__in=active_datasets

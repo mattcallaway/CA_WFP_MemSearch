@@ -1,4 +1,5 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.contrib.auth.models import User
 from django.db import transaction
 from roster.models import Location, LocationGeographyResolution, AuditEvent
 
@@ -7,17 +8,29 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true', help='Preview changes without committing')
-        parser.add_argument('--actor', type=str, default='SYSTEM_CLI', help='The actor executing the rebuild')
+        parser.add_argument('--actor', type=str, required=True, help='The actor username executing the rebuild')
         parser.add_argument('--location-ids', nargs='+', type=int, help='Limit rebuild to specific location IDs')
         parser.add_argument('--run-id', type=int, help='Limit rebuild to locations resolved in a specific run')
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        actor = options['actor']
+        actor_username = options['actor']
         location_ids = options['location_ids']
         run_id = options['run_id']
 
-        self.stdout.write(f"Starting cache rebuild. Actor: {actor}, Dry Run: {dry_run}")
+        # Validate actor exists, is active, and is authorized
+        try:
+            actor_user = User.objects.get(username=actor_username)
+        except User.DoesNotExist:
+            raise CommandError(f"Actor username '{actor_username}' does not exist.")
+
+        if not actor_user.is_active:
+            raise CommandError(f"Actor username '{actor_username}' is inactive.")
+
+        if not (actor_user.is_superuser or actor_user.has_perm('roster.manage_geography_reference')):
+            raise CommandError(f"Actor username '{actor_username}' does not have 'roster.manage_geography_reference' permission.")
+
+        self.stdout.write(f"Starting cache rebuild. Actor: {actor_username}, Dry Run: {dry_run}")
 
         # Filter target locations
         locations_qs = Location.objects.all()
@@ -113,7 +126,6 @@ class Command(BaseCommand):
                         'match_method', 'geo_confidence', 'geo_ambiguity_status', 'geo_explanation'
                     ])
                 elif dry_run:
-                    # Rollback chunk edits
                     pass
 
         self.stdout.write(
@@ -124,5 +136,5 @@ class Command(BaseCommand):
             AuditEvent.objects.create(
                 event_type='GEOGRAPHY_CACHE_REBUILD',
                 description=f"Rebuilt location geography cache. Updated: {success_count}, Cleared: {cleared_count}, Corrupted: {corrupt_count}.",
-                actor=actor
+                actor=actor_username
             )
