@@ -412,7 +412,7 @@ class GeographyTests(TestCase):
         self.assertEqual(loc.match_method, 'EXACT_PLACE_ZIP_MATCH')
 
         # Mock multiple current resolutions to test corruption detection
-        from unittest.mock import patch
+        from unittest.mock import patch, MagicMock
         from django.db.models.query import QuerySet
 
         mock_res1 = LocationGeographyResolution(
@@ -424,8 +424,11 @@ class GeographyTests(TestCase):
             matched_canonical_county=c, match_method='UNIQUE_ZIP_INFERENCE', confidence='MEDIUM', status='CURRENT'
         )
 
-        # We patch filter to return multiple mock resolutions
-        with patch.object(QuerySet, 'filter', return_value=[mock_res1, mock_res2]):
+        mock_query = MagicMock()
+        mock_query.select_related.return_value = [mock_res1, mock_res2]
+
+        # Target only the filter method on LocationGeographyResolution's manager
+        with patch('roster.models.LocationGeographyResolution.objects.filter', return_value=mock_query):
             call_command('rebuild_location_geography_cache', actor="test_runner")
             loc.refresh_from_db()
             # Remains unchanged due to corruption skip
