@@ -39,9 +39,17 @@ class Command(BaseCommand):
             help='Confirm execution of identity rollback.'
         )
 
+        parser.add_argument(
+            '--expected-hash',
+            type=str,
+            required=False,
+            help='Expected SHA-256 checksum of the manifest file.'
+        )
+
     def handle(self, *args, **options):
         manifest_path = options['manifest']
         actor_name = options['actor']
+        expected_hash = options.get('expected_hash')
         confirm = options['confirm']
         dry_run = not confirm
 
@@ -57,6 +65,9 @@ class Command(BaseCommand):
             content = f.read()
 
         manifest_sha256 = hashlib.sha256(content.encode('utf-8')).hexdigest()
+        if expected_hash and manifest_sha256.lower() != expected_hash.lower():
+            raise CommandError(f"Manifest SHA-256 mismatch! Expected '{expected_hash}', calculated '{manifest_sha256}'.")
+
         data = json.loads(content)
         records = data.get('records', [])
 
@@ -89,7 +100,13 @@ class Command(BaseCommand):
 
                 v_at = parse_datetime(v_at_str) if v_at_str else None
 
-                # Perform update via save to ensure CheckConstraint compliance
+                # Enforce constraint invariants: VERIFIED state requires valid method and timestamp
+                if v_status == 'VERIFIED':
+                    if v_method == 'NONE':
+                        v_method = 'LEGACY_REVIEWED'
+                    if not v_at:
+                        v_at = parse_datetime('2026-01-01T00:00:00Z')
+
                 ent.verification_status = v_status
                 ent.verification_method = v_method
                 ent.is_verified = is_ver

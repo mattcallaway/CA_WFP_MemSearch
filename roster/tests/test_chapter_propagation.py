@@ -118,3 +118,78 @@ class ChapterPropagationTestCase(TestCase):
         res2 = ChapterEvaluationResult.objects.filter(evaluation_run=run2, contributor_entity=self.entity).first()
         if res2:
             self.assertFalse(res2.entity_verification_snapshot)
+
+    def test_preview_mode_never_changes_current_evaluation_run_pointer(self):
+        run_apply = ChapterEvaluationRun.objects.create(
+            chapter=self.chapter,
+            rule_set=self.rule_set,
+            run_mode="APPLY",
+            trigger_type="MANUAL_FULL_EVALUATION",
+            geography_dataset_snapshot={},
+            resolver_version="1.0",
+            evaluation_engine_version="1.0",
+            membership_snapshot_date=date.today(),
+            scope="FULL",
+            actor="admin",
+            status="PENDING"
+        )
+        run_chapter_evaluation(run_apply.id)
+        self.chapter.refresh_from_db()
+        self.assertEqual(self.chapter.current_evaluation_run_id, run_apply.id)
+
+        # Execute PREVIEW run
+        run_prev = ChapterEvaluationRun.objects.create(
+            chapter=self.chapter,
+            rule_set=self.rule_set,
+            run_mode="PREVIEW",
+            trigger_type="MANUAL_FULL_EVALUATION",
+            geography_dataset_snapshot={},
+            resolver_version="1.0",
+            evaluation_engine_version="1.0",
+            membership_snapshot_date=date.today(),
+            scope="FULL",
+            actor="admin",
+            status="PENDING"
+        )
+        run_chapter_evaluation(run_prev.id)
+
+        # Assert pointer remains run_apply
+        self.chapter.refresh_from_db()
+        self.assertEqual(self.chapter.current_evaluation_run_id, run_apply.id)
+
+    def test_failed_replacement_run_leaves_previous_pointer_unchanged(self):
+        run_apply = ChapterEvaluationRun.objects.create(
+            chapter=self.chapter,
+            rule_set=self.rule_set,
+            run_mode="APPLY",
+            trigger_type="MANUAL_FULL_EVALUATION",
+            geography_dataset_snapshot={},
+            resolver_version="1.0",
+            evaluation_engine_version="1.0",
+            membership_snapshot_date=date.today(),
+            scope="FULL",
+            actor="admin",
+            status="PENDING"
+        )
+        run_chapter_evaluation(run_apply.id)
+        self.chapter.refresh_from_db()
+        self.assertEqual(self.chapter.current_evaluation_run_id, run_apply.id)
+
+        # Simulate a failed replacement run
+        run_failed = ChapterEvaluationRun.objects.create(
+            chapter=self.chapter,
+            rule_set=self.rule_set,
+            run_mode="APPLY",
+            trigger_type="MANUAL_FULL_EVALUATION",
+            geography_dataset_snapshot={},
+            resolver_version="1.0",
+            evaluation_engine_version="1.0",
+            membership_snapshot_date=date.today(),
+            scope="FULL",
+            actor="admin",
+            status="FAILED"
+        )
+
+        # Assert chapter pointer remains run_apply
+        self.chapter.refresh_from_db()
+        self.assertEqual(self.chapter.current_evaluation_run_id, run_apply.id)

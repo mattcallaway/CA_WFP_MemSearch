@@ -76,3 +76,23 @@ class ImportBenchmarkTestCase(TestCase):
             self.assertEqual(batch.status, 'COMPLETED')
         finally:
             os.remove(csv_path)
+
+    def test_query_count_bounds_10000_rows(self):
+        import time, tracemalloc
+        csv_path = self._generate_synthetic_csv(10000)
+        try:
+            tracemalloc.start()
+            start_time = time.time()
+            reset_queries()
+            batch = import_csv_file(csv_path, "bench_10000.csv", self.profile.id, actor="admin")
+            query_count = len(connection.queries)
+            duration = time.time() - start_time
+            current_mem, peak_mem = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+            # Assert query count is chunk-bounded (under 800 queries for 10,000 rows)
+            self.assertLessEqual(query_count, 800, f"Query count {query_count} exceeded chunk limit of 800 for 10,000 rows.")
+            self.assertEqual(batch.status, 'COMPLETED')
+            self.assertEqual(batch.row_count, 10000)
+        finally:
+            os.remove(csv_path)

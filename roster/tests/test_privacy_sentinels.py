@@ -37,6 +37,26 @@ class PrivacySentinelTestCase(TestCase):
         response = self.client.get(reverse('audit_history'))
         self.assertEqual(response.status_code, 403)
 
+    def test_unauthorized_people_list_returns_403(self):
+        self.client.login(username="unprivileged_user", password="password")
+        response = self.client.get(reverse('people_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_unauthorized_person_profile_returns_403(self):
+        self.client.login(username="unprivileged_user", password="password")
+        response = self.client.get(reverse('person_profile', args=[self.entity.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_unauthorized_imports_list_returns_403(self):
+        self.client.login(username="unprivileged_user", password="password")
+        response = self.client.get(reverse('imports_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_unauthorized_geography_datasets_returns_403(self):
+        self.client.login(username="unprivileged_user", password="password")
+        response = self.client.get(reverse('geography_datasets_list'))
+        self.assertEqual(response.status_code, 403)
+
     def test_privacy_values_projection_excludes_pii(self):
         # Queryset values projection used for anonymized exports / views
         qs = ContributorEntity.objects.values('id', 'entity_type', 'verification_status')
