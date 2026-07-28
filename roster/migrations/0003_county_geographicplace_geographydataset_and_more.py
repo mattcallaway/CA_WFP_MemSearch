@@ -375,7 +375,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='geographyidentifier',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('county_target__isnull', False), ('place_target__isnull', True), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', False), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', True), ('postal_target__isnull', False)), _connector='OR'), name='exactly_one_target_identifier'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('county_target__isnull', False), ('place_target__isnull', True), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', False), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', True), ('postal_target__isnull', False)), _connector='OR'), name='exactly_one_target_identifier'),
         ),
         migrations.AddIndex(
             model_name='rawgeographyrecord',
@@ -395,6 +395,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='geographyalias',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('county_target__isnull', False), ('place_target__isnull', True), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', False), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', True), ('postal_target__isnull', False)), _connector='OR'), name='exactly_one_target_alias'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('county_target__isnull', False), ('place_target__isnull', True), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', False), ('postal_target__isnull', True)), models.Q(('county_target__isnull', True), ('place_target__isnull', True), ('postal_target__isnull', False)), _connector='OR'), name='exactly_one_target_alias'),
         ),
     ]

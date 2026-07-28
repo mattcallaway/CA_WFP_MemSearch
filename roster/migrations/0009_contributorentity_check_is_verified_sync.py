@@ -12,6 +12,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddConstraint(
             model_name='contributorentity',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('is_verified', True), ('verification_status', 'VERIFIED')), models.Q(('is_verified', False), ('verification_status', 'UNVERIFIED')), _connector='OR'), name='check_is_verified_sync'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('is_verified', True), ('verification_status', 'VERIFIED')), models.Q(('is_verified', False), ('verification_status', 'UNVERIFIED')), _connector='OR'), name='check_is_verified_sync'),
         ),
     ]

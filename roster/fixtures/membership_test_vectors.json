@@ -1,0 +1,813 @@
+[
+  {
+    "vector_id": "V01",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-04-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": true,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S01"
+  },
+  {
+    "vector_id": "V02",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2025-12-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-01-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-02-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-03-01",
+      "coverage_is_complete": false,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": true
+    },
+    "expected_state_id": "S02"
+  },
+  {
+    "vector_id": "V03",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2025-12-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-01-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-02-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": true,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S03"
+  },
+  {
+    "vector_id": "V04",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": true,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S04"
+  },
+  {
+    "vector_id": "V05",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        }
+      ],
+      "coverage_through_date": "2026-03-01",
+      "coverage_is_complete": false,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S05"
+  },
+  {
+    "vector_id": "V06",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-01-05",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-01-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-10",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S06"
+  },
+  {
+    "vector_id": "V07",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-04-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": true,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S07"
+  },
+  {
+    "vector_id": "V08",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-01-05",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-01-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-10",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S08"
+  },
+  {
+    "vector_id": "V09",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S09"
+  },
+  {
+    "vector_id": "V10",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S10"
+  },
+  {
+    "vector_id": "V11a",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "ORGANIZATION",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": true,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S11"
+  },
+  {
+    "vector_id": "V11b",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "JOINT",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": true,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S11"
+  },
+  {
+    "vector_id": "V11c",
+    "expected_rejected_rule_id": null,
+    "is_negative_vector": false,
+    "inputs": {
+      "entity_type": "UNKNOWN",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": true,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": "S11"
+  },
+  {
+    "vector_id": "VN01",
+    "expected_rejected_rule_id": "R01",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-04-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": true,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  },
+  {
+    "vector_id": "VN02",
+    "expected_rejected_rule_id": "R02",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  },
+  {
+    "vector_id": "VN03",
+    "expected_rejected_rule_id": "R03",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": true,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  },
+  {
+    "vector_id": "VN04",
+    "expected_rejected_rule_id": "R04",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "ORGANIZATION",
+      "verification_status": "VERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-04-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": true,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  },
+  {
+    "vector_id": "VN05",
+    "expected_rejected_rule_id": "R05",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "contributions": [
+        {
+          "transaction_date": "2026-03-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 1
+        },
+        {
+          "transaction_date": "2026-04-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 2
+        },
+        {
+          "transaction_date": "2026-05-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 3
+        },
+        {
+          "transaction_date": "2026-06-15",
+          "amount": 10.0,
+          "transaction_type": "CONTRIBUTION",
+          "source_record_id": 4
+        }
+      ],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": true,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  },
+  {
+    "vector_id": "VN06",
+    "expected_rejected_rule_id": "R06",
+    "is_negative_vector": true,
+    "inputs": {
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "contributions": [],
+      "coverage_through_date": "2026-07-01",
+      "coverage_is_complete": true,
+      "evaluation_date": "2026-07-15",
+      "rule": {
+        "monthly_interval_min": 20,
+        "monthly_interval_max": 40,
+        "active_grace_period": 60,
+        "min_recurring_payments": 2,
+        "skip_payment_allowed": true,
+        "rule_version_id": 1
+      }
+    },
+    "expected_predicates": {
+      "is_current_authoritative_member": false,
+      "is_provisional_possible_member": false,
+      "is_one_time_donor": false,
+      "is_ineligible_entity": false,
+      "is_lapsed_donor": false,
+      "is_previously_recurring_donor": false
+    },
+    "expected_state_id": null
+  }
+]

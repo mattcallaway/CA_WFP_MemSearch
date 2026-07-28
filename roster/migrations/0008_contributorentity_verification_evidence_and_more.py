@@ -77,19 +77,19 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='contributorentity',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('verification_status', 'UNVERIFIED'), _negated=True), ('verification_method', 'NONE'), _connector='OR'), name='check_unverified_method_none'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('verification_status', 'UNVERIFIED'), _negated=True), ('verification_method', 'NONE'), _connector='OR'), name='check_unverified_method_none'),
         ),
         migrations.AddConstraint(
             model_name='contributorentity',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('verification_status', 'VERIFIED'), _negated=True), models.Q(('verification_method', 'NONE'), _negated=True), _connector='OR'), name='check_verified_method_not_none'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('verification_status', 'VERIFIED'), _negated=True), models.Q(('verification_method', 'NONE'), _negated=True), _connector='OR'), name='check_verified_method_not_none'),
         ),
         migrations.AddConstraint(
             model_name='contributorentity',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('verification_status', 'VERIFIED'), _negated=True), ('verified_at__isnull', False), _connector='OR'), name='check_verified_has_timestamp'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('verification_status', 'VERIFIED'), _negated=True), ('verified_at__isnull', False), _connector='OR'), name='check_verified_has_timestamp'),
         ),
         migrations.AddConstraint(
             model_name='contributorentity',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('verification_method', 'ADMIN_REVIEW'), _negated=True), ('verified_by__isnull', False), _connector='OR'), name='check_admin_verified_has_actor'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('verification_method', 'ADMIN_REVIEW'), _negated=True), ('verified_by__isnull', False), _connector='OR'), name='check_admin_verified_has_actor'),
         ),
         migrations.AddConstraint(
             model_name='importbatch',

@@ -195,7 +195,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='chapterentityoverride',
-            constraint=models.CheckConstraint(check=models.Q(('expiration_date__isnull', True), ('expiration_date__gte', models.F('effective_date')), _connector='OR'), name='check_override_expiration'),
+            constraint=models.CheckConstraint(condition=models.Q(('expiration_date__isnull', True), ('expiration_date__gte', models.F('effective_date')), _connector='OR'), name='check_override_expiration'),
         ),
         migrations.AddConstraint(
             model_name='chapterentityoverride',
@@ -207,7 +207,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='chapterrulematch',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('matched_county__isnull', True), ('matched_place__isnull', True), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', False), ('matched_place__isnull', True), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', True), ('matched_place__isnull', False), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', True), ('matched_place__isnull', True), ('matched_postal_area__isnull', False)), _connector='OR'), name='check_match_target_mutually_exclusive'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('matched_county__isnull', True), ('matched_place__isnull', True), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', False), ('matched_place__isnull', True), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', True), ('matched_place__isnull', False), ('matched_postal_area__isnull', True)), models.Q(('matched_county__isnull', True), ('matched_place__isnull', True), ('matched_postal_area__isnull', False)), _connector='OR'), name='check_match_target_mutually_exclusive'),
         ),
         migrations.AddConstraint(
             model_name='chapterruleset',
@@ -219,19 +219,19 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='chapterrule',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('county__isnull', False), ('place__isnull', True), ('postal_area__isnull', True)), models.Q(('county__isnull', True), ('place__isnull', False), ('postal_area__isnull', True)), models.Q(('county__isnull', True), ('place__isnull', True), ('postal_area__isnull', False)), _connector='OR'), name='check_target_mutually_exclusive'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('county__isnull', False), ('place__isnull', True), ('postal_area__isnull', True)), models.Q(('county__isnull', True), ('place__isnull', False), ('postal_area__isnull', True)), models.Q(('county__isnull', True), ('place__isnull', True), ('postal_area__isnull', False)), _connector='OR'), name='check_target_mutually_exclusive'),
         ),
         migrations.AddConstraint(
             model_name='chapterrule',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('target_type', 'COUNTY'), _negated=True), models.Q(('county__isnull', False), ('place__isnull', True), ('postal_area__isnull', True)), _connector='OR'), name='check_target_type_county'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('target_type', 'COUNTY'), _negated=True), models.Q(('county__isnull', False), ('place__isnull', True), ('postal_area__isnull', True)), _connector='OR'), name='check_target_type_county'),
         ),
         migrations.AddConstraint(
             model_name='chapterrule',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('target_type', 'PLACE'), _negated=True), models.Q(('county__isnull', True), ('place__isnull', False), ('postal_area__isnull', True)), _connector='OR'), name='check_target_type_place'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('target_type', 'PLACE'), _negated=True), models.Q(('county__isnull', True), ('place__isnull', False), ('postal_area__isnull', True)), _connector='OR'), name='check_target_type_place'),
         ),
         migrations.AddConstraint(
             model_name='chapterrule',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('target_type', 'POSTAL_AREA'), _negated=True), models.Q(('county__isnull', True), ('place__isnull', True), ('postal_area__isnull', False)), _connector='OR'), name='check_target_type_postal'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('target_type', 'POSTAL_AREA'), _negated=True), models.Q(('county__isnull', True), ('place__isnull', True), ('postal_area__isnull', False)), _connector='OR'), name='check_target_type_postal'),
         ),
         migrations.AddConstraint(
             model_name='chapterrule',

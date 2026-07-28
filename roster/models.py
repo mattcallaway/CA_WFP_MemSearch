@@ -107,23 +107,23 @@ class ContributorEntity(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=~models.Q(verification_status='UNVERIFIED') | models.Q(verification_method='NONE'),
+                condition=~models.Q(verification_status='UNVERIFIED') | models.Q(verification_method='NONE'),
                 name='check_unverified_method_none'
             ),
             models.CheckConstraint(
-                check=~models.Q(verification_status='VERIFIED') | ~models.Q(verification_method='NONE'),
+                condition=~models.Q(verification_status='VERIFIED') | ~models.Q(verification_method='NONE'),
                 name='check_verified_method_not_none'
             ),
             models.CheckConstraint(
-                check=~models.Q(verification_status='VERIFIED') | models.Q(verified_at__isnull=False),
+                condition=~models.Q(verification_status='VERIFIED') | models.Q(verified_at__isnull=False),
                 name='check_verified_has_timestamp'
             ),
             models.CheckConstraint(
-                check=~models.Q(verification_method='ADMIN_REVIEW') | models.Q(verified_by__isnull=False),
+                condition=~models.Q(verification_method='ADMIN_REVIEW') | models.Q(verified_by__isnull=False),
                 name='check_admin_verified_has_actor'
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     (models.Q(is_verified=True) & models.Q(verification_status='VERIFIED')) |
                     (models.Q(is_verified=False) & models.Q(verification_status='UNVERIFIED'))
                 ),
@@ -345,6 +345,87 @@ class MembershipAssessment(models.Model):
 
     def __str__(self):
         return f"Assessment: Entity {self.contributor_entity_id} - {self.calculated_status} ({self.membership_authority})"
+
+class AmendmentRelationship(models.Model):
+    """Tracks amendment relationships between contributions.
+    
+    Conservative disposition policy:
+    - PENDING: Original operative, replacement is evidence only
+    - ACCEPTED: Replacement operative, original is historical provenance
+    - REJECTED: Original operative, replacement excluded
+    """
+    RELATIONSHIP_CHOICES = [
+        ('AMENDMENT', 'Amendment'),
+        ('CORRECTION', 'Correction'),
+        ('SUPERSESSION', 'Supersession'),
+    ]
+    REVIEW_STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('ACCEPTED', 'Accepted'),
+        ('REJECTED', 'Rejected'),
+    ]
+    DISPOSITION_CHOICES = [
+        ('ORIGINAL', 'Original is operative'),
+        ('REPLACEMENT', 'Replacement is operative'),
+        ('NEITHER', 'Neither is operative'),
+    ]
+
+    original_contribution = models.ForeignKey(
+        'Contribution', on_delete=models.PROTECT,
+        related_name='amendment_as_original',
+        help_text='The original contribution being amended',
+    )
+    replacement_contribution = models.ForeignKey(
+        'Contribution', on_delete=models.PROTECT,
+        related_name='amendment_as_replacement',
+        help_text='The replacement contribution',
+    )
+    relationship_type = models.CharField(
+        max_length=50, choices=RELATIONSHIP_CHOICES,
+    )
+    review_status = models.CharField(
+        max_length=50, choices=REVIEW_STATUS_CHOICES, default='PENDING',
+    )
+    operative_contribution = models.ForeignKey(
+        'Contribution', on_delete=models.PROTECT,
+        related_name='amendment_operative_for',
+        null=True, blank=True,
+        help_text='Which contribution is currently operative for totals',
+    )
+    financial_disposition = models.CharField(
+        max_length=50, choices=DISPOSITION_CHOICES, default='ORIGINAL',
+    )
+    recurrence_disposition = models.CharField(
+        max_length=50, choices=DISPOSITION_CHOICES, default='ORIGINAL',
+    )
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    explanation = models.TextField(blank=True)
+    audit_event = models.ForeignKey(
+        'AuditEvent', on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(original_contribution=models.F('replacement_contribution')),
+                name='amendment_not_self_referential',
+            ),
+            models.UniqueConstraint(
+                fields=['original_contribution', 'replacement_contribution'],
+                name='unique_amendment_pair',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"Amendment: Contribution {self.original_contribution_id} → "
+            f"{self.replacement_contribution_id} ({self.review_status})"
+        )
 
 class Location(models.Model):
     PRECISION_CHOICES = [
@@ -715,7 +796,7 @@ class GeographyIdentifier(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (models.Q(county_target__isnull=False) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=True)) |
                     (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=False) & models.Q(postal_target__isnull=True)) |
                     (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=False))
@@ -763,7 +844,7 @@ class PlaceCountyAssociation(models.Model):
                 name='unique_active_place_county_association'
             ),
             models.CheckConstraint(
-                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                condition=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
                 name='range_place_county_normalized_weight'
             )
         ]
@@ -807,7 +888,7 @@ class PostalCountyAssociation(models.Model):
                 name='unique_active_postal_county_association'
             ),
             models.CheckConstraint(
-                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                condition=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
                 name='range_postal_county_normalized_weight'
             )
         ]
@@ -851,7 +932,7 @@ class PostalPlaceAssociation(models.Model):
                 name='unique_active_postal_place_association'
             ),
             models.CheckConstraint(
-                check=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
+                condition=models.Q(normalized_weight_value__isnull=True) | (models.Q(normalized_weight_value__gte=0.0) & models.Q(normalized_weight_value__lte=1.0)),
                 name='range_postal_place_normalized_weight'
             )
         ]
@@ -885,7 +966,7 @@ class GeographyAlias(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (models.Q(county_target__isnull=False) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=True)) |
                     (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=False) & models.Q(postal_target__isnull=True)) |
                     (models.Q(county_target__isnull=True) & models.Q(place_target__isnull=True) & models.Q(postal_target__isnull=False))
@@ -1094,7 +1175,7 @@ class ChapterRule(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (models.Q(county__isnull=False) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=True)) |
                     (models.Q(county__isnull=True) & models.Q(place__isnull=False) & models.Q(postal_area__isnull=True)) |
                     (models.Q(county__isnull=True) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=False))
@@ -1102,15 +1183,15 @@ class ChapterRule(models.Model):
                 name="check_target_mutually_exclusive"
             ),
             models.CheckConstraint(
-                check=~models.Q(target_type="COUNTY") | (models.Q(county__isnull=False) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=True)),
+                condition=~models.Q(target_type="COUNTY") | (models.Q(county__isnull=False) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=True)),
                 name="check_target_type_county"
             ),
             models.CheckConstraint(
-                check=~models.Q(target_type="PLACE") | (models.Q(county__isnull=True) & models.Q(place__isnull=False) & models.Q(postal_area__isnull=True)),
+                condition=~models.Q(target_type="PLACE") | (models.Q(county__isnull=True) & models.Q(place__isnull=False) & models.Q(postal_area__isnull=True)),
                 name="check_target_type_place"
             ),
             models.CheckConstraint(
-                check=~models.Q(target_type="POSTAL_AREA") | (models.Q(county__isnull=True) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=False)),
+                condition=~models.Q(target_type="POSTAL_AREA") | (models.Q(county__isnull=True) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=False)),
                 name="check_target_type_postal"
             ),
             models.UniqueConstraint(
@@ -1162,7 +1243,7 @@ class ChapterEntityOverride(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gte=models.F('effective_date')),
+                condition=models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gte=models.F('effective_date')),
                 name="check_override_expiration"
             ),
             models.UniqueConstraint(
@@ -1341,7 +1422,7 @@ class ChapterRuleMatch(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (models.Q(matched_county__isnull=True) & models.Q(matched_place__isnull=True) & models.Q(matched_postal_area__isnull=True)) |
                     (models.Q(matched_county__isnull=False) & models.Q(matched_place__isnull=True) & models.Q(matched_postal_area__isnull=True)) |
                     (models.Q(matched_county__isnull=True) & models.Q(matched_place__isnull=False) & models.Q(matched_postal_area__isnull=True)) |

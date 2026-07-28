@@ -1,0 +1,288 @@
+{
+  "schema_version": "2.0",
+  "policy_version": "2B1-002",
+  "status": "DRAFT",
+  "states": [
+    {
+      "id": "S01",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "CURRENT",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": true,
+        "has_irregular_intervals": false,
+        "coverage_is_current": true,
+        "within_grace_period": true,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified individual with active recurring contributions within grace period"
+    },
+    {
+      "id": "S02",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "PREVIOUSLY_RECURRING",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "STALE",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": true,
+        "has_irregular_intervals": false,
+        "coverage_is_current": false,
+        "within_grace_period": false,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified recurring donor beyond grace, coverage stale"
+    },
+    {
+      "id": "S03",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "LAPSED",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "CURRENT",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": true,
+        "has_irregular_intervals": false,
+        "coverage_is_current": true,
+        "within_grace_period": false,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified recurring donor beyond grace with current coverage confirms lapse"
+    },
+    {
+      "id": "S04",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "ONE_TIME",
+      "recurrence_pattern_status": "NO_RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "CURRENT",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 1,
+        "positive_contribution_count_max": 1,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": false,
+        "coverage_is_current": true,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified individual, one contribution, current complete coverage"
+    },
+    {
+      "id": "S05",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "DATASET_TOO_STALE",
+      "recurrence_pattern_status": "NO_RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "STALE",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 1,
+        "positive_contribution_count_max": 1,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": false,
+        "coverage_is_current": false,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified individual, one contribution, stale coverage"
+    },
+    {
+      "id": "S06",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "VERIFIED",
+      "calculated_status": "INSUFFICIENT_HISTORY",
+      "recurrence_pattern_status": "IRREGULAR_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "VERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": true,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Verified individual with irregular contribution intervals"
+    },
+    {
+      "id": "S07",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "calculated_status": "PROVISIONAL",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "PROVISIONAL",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "UNVERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": true,
+        "has_irregular_intervals": false,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Unverified individual with recurring pattern"
+    },
+    {
+      "id": "S08",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "calculated_status": "UNKNOWN",
+      "recurrence_pattern_status": "IRREGULAR_PATTERN",
+      "membership_authority": "PROVISIONAL",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "UNVERIFIED",
+        "positive_contribution_count_min": 2,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": true,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Unverified individual with irregular contributions"
+    },
+    {
+      "id": "S09",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "UNVERIFIED",
+      "calculated_status": "PROVISIONAL",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "PROVISIONAL",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "UNVERIFIED",
+        "positive_contribution_count_min": 1,
+        "positive_contribution_count_max": 1,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": false,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Unverified individual with exactly one contribution"
+    },
+    {
+      "id": "S10",
+      "entity_type": "INDIVIDUAL",
+      "verification_status": "ANY",
+      "calculated_status": "UNKNOWN",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "PROVISIONAL",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": "INDIVIDUAL",
+        "verification_condition": "ANY",
+        "positive_contribution_count_min": 0,
+        "positive_contribution_count_max": 0,
+        "has_recurring_pattern": false,
+        "has_irregular_intervals": false,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "OPERATIVE_ONLY"
+      },
+      "justification": "Individual with zero usable contributions"
+    },
+    {
+      "id": "S11",
+      "entity_type": ["ORGANIZATION", "JOINT", "UNKNOWN"],
+      "verification_status": "ANY",
+      "calculated_status": "UNKNOWN",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "INELIGIBLE",
+      "coverage_condition": "ANY",
+      "evidence_conditions": {
+        "entity_type_condition": ["ORGANIZATION", "JOINT", "UNKNOWN"],
+        "verification_condition": "ANY",
+        "positive_contribution_count_min": null,
+        "positive_contribution_count_max": null,
+        "has_recurring_pattern": null,
+        "has_irregular_intervals": null,
+        "coverage_is_current": null,
+        "within_grace_period": null,
+        "applicable_disposition": "ANY"
+      },
+      "justification": "Non-individual entity types ineligible"
+    }
+  ],
+  "rejected_combinations": [
+    {
+      "id": "R01",
+      "rule": "ACTIVE with non-authoritative",
+      "fields": {
+        "calculated_status": "ACTIVE",
+        "membership_authority": ["PROVISIONAL", "INELIGIBLE"]
+      }
+    },
+    {
+      "id": "R02",
+      "rule": "ACTIVE with insufficient history",
+      "fields": {
+        "calculated_status": "ACTIVE",
+        "recurrence_pattern_status": "INSUFFICIENT_HISTORY"
+      }
+    },
+    {
+      "id": "R03",
+      "rule": "PROVISIONAL status with AUTHORITATIVE authority",
+      "fields": {
+        "calculated_status": "PROVISIONAL",
+        "membership_authority": "AUTHORITATIVE"
+      }
+    },
+    {
+      "id": "R04",
+      "rule": "Non-individual with individual authority",
+      "fields": {
+        "entity_type": ["ORGANIZATION", "JOINT", "UNKNOWN"],
+        "membership_authority": ["AUTHORITATIVE", "PROVISIONAL"]
+      }
+    },
+    {
+      "id": "R05",
+      "rule": "Unverified with AUTHORITATIVE",
+      "fields": {
+        "verification_status": "UNVERIFIED",
+        "membership_authority": "AUTHORITATIVE"
+      }
+    },
+    {
+      "id": "R06",
+      "rule": "Recurring status with insufficient evidence",
+      "fields": {
+        "calculated_status": ["ACTIVE", "PREVIOUSLY_RECURRING", "LAPSED"],
+        "recurrence_pattern_status": "INSUFFICIENT_HISTORY"
+      }
+    }
+  ]
+}

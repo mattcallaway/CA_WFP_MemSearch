@@ -4,6 +4,7 @@ Env/
 ENV/
 db.sqlite3
 db.sqlite3.bak
+db.sqlite3.pre_*
 __pycache__/
 *.pyc
 *.pyo
@@ -14,3 +15,12 @@ scratch/
 .DS_Store
 Thumbs.db
 artifacts/
+
+# Generated evidence artifacts (not tracked)
+benchmarks/
+release/
+tests/
+*.zip
+*.zip.sha256
+dry_run_repair_manifest.json
+predicate_migration_inventory.txt

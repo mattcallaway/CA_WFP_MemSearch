@@ -129,7 +129,7 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
     amount_col = rules.get('AMOUNT')
     date_col = rules.get('TRANSACTION DATE')
     zip_col = rules.get('ZIP')
-    txn_col = rules.get('TRANSACTION NUMBER')
+    txn_col = rules.get('TRANSACTION NUMBER') or rules.get('TRANSACTION ID')
     city_col = rules.get('CITY')
     state_col = rules.get('STATE')
     emp_col = rules.get('EMPLOYER')
@@ -194,7 +194,7 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
 
     # Bulk create raw contributions if not already in DB
     if not existing_completed_batch:
-        RawContribution.objects.bulk_create(raw_contrib_instances)
+        RawContribution.objects.bulk_create(raw_contrib_instances, batch_size=500)
         
     raw_contrib_map = {rc.row_number: rc for rc in RawContribution.objects.filter(import_batch=batch)}
 
@@ -403,8 +403,8 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
         parsed_contrib_data[row_number] = p
         successful_count += 1
         
-    RawContribution.objects.bulk_update(raw_contrib_map.values(), ['validation_status', 'validation_errors'])
-    created_contributions = Contribution.objects.bulk_create(contributions_to_create)
+    RawContribution.objects.bulk_update(raw_contrib_map.values(), ['validation_status', 'validation_errors'], batch_size=500)
+    created_contributions = Contribution.objects.bulk_create(contributions_to_create, batch_size=500)
     
     # 5. Identity clustering and locations
     affected_clusters_list = []
@@ -542,22 +542,22 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
 
     # 5.1 Perform bulk creations
     if entities_to_create:
-        ContributorEntity.objects.bulk_create(entities_to_create)
+        ContributorEntity.objects.bulk_create(entities_to_create, batch_size=500)
         
     if orgs_to_create:
         for org in orgs_to_create:
             org.contributor_entity_id = org.contributor_entity.id
-        Organization.objects.bulk_create(orgs_to_create)
+        Organization.objects.bulk_create(orgs_to_create, batch_size=500)
         
     if persons_to_create:
         for person in persons_to_create:
             person.contributor_entity_id = person.contributor_entity.id
-        Person.objects.bulk_create(persons_to_create)
+        Person.objects.bulk_create(persons_to_create, batch_size=500)
         
     if clusters_to_create:
         for cluster in clusters_to_create:
             cluster.contributor_entity_id = cluster.contributor_entity.id
-        ContributionCluster.objects.bulk_create(clusters_to_create)
+        ContributionCluster.objects.bulk_create(clusters_to_create, batch_size=500)
 
     # Map temporary reference keys to confirmed database primary keys
     for cluster in clusters_to_create:
@@ -576,11 +576,11 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
     affected_cluster_ids = {cluster.id for cluster in affected_clusters_list if getattr(cluster, 'id', None)}
     affected_entity_ids = {cluster.contributor_entity_id for cluster in affected_clusters_list if getattr(cluster, 'contributor_entity_id', None)}
 
-    ContributionClusterAssignment.objects.bulk_create(assignments_to_create)
-    Location.objects.bulk_create(locations_to_create)
+    ContributionClusterAssignment.objects.bulk_create(assignments_to_create, batch_size=500)
+    Location.objects.bulk_create(locations_to_create, batch_size=500)
     
     if clusters_to_update:
-        ContributionCluster.objects.bulk_update(clusters_to_update, ['confidence_level', 'confidence_explanation'])
+        ContributionCluster.objects.bulk_update(clusters_to_update, ['confidence_level', 'confidence_explanation'], batch_size=500)
         
     # Mark batch complete
     batch.row_count = len(parsed_rows)
@@ -597,11 +597,11 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
     for c in created_contributions:
         links_to_create.append(SourceRecordLink(
             source_model_name="RawContribution",
-            source_record_id=c.raw_contribution.id,
+            source_record_id=c.raw_contribution_id,
             target_model_name="Contribution",
             target_record_id=c.id
         ))
-    SourceRecordLink.objects.bulk_create(links_to_create)
+    SourceRecordLink.objects.bulk_create(links_to_create, batch_size=500)
     
     AuditEvent.objects.create(
         event_type="IMPORT_BATCH",

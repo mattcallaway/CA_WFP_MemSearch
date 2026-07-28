@@ -1,0 +1,9 @@
+{
+  "schema_version": "2.0",
+  "policy_version": "2B1-002",
+  "matrix_content_sha256": "1522e4fe9122485607cc2b1ca233c0f1687878bcf23eb3e3af9eebd24951f357",
+  "matrix_file_path": "roster/fixtures/allowed_state_matrix.json",
+  "approval_status": "DRAFT",
+  "approved_by": null,
+  "approved_at": null
+}

@@ -52,14 +52,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='placecountyassociation',
-            constraint=models.CheckConstraint(check=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_place_county_normalized_weight'),
+            constraint=models.CheckConstraint(condition=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_place_county_normalized_weight'),
         ),
         migrations.AddConstraint(
             model_name='postalcountyassociation',
-            constraint=models.CheckConstraint(check=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_postal_county_normalized_weight'),
+            constraint=models.CheckConstraint(condition=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_postal_county_normalized_weight'),
         ),
         migrations.AddConstraint(
             model_name='postalplaceassociation',
-            constraint=models.CheckConstraint(check=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_postal_place_normalized_weight'),
+            constraint=models.CheckConstraint(condition=models.Q(('normalized_weight_value__isnull', True), models.Q(('normalized_weight_value__gte', 0.0), ('normalized_weight_value__lte', 1.0)), _connector='OR'), name='range_postal_place_normalized_weight'),
         ),
     ]
