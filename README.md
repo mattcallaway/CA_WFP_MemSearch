@@ -1,13 +1,13 @@
-# California Working Families Party MemSearch Roster Application (Stage 1)
+# California Working Families Party MemSearch Roster Application
 
-This is a secure, transaction-first, private web application designed to turn California Secretary of State (SOS) contribution records into an accurate, searchable membership roster.
+This is a secure, transaction-first, private web application designed to turn California Secretary of State (SOS) contribution records into an accurate, searchable membership roster with geographic chapter assignments.
 
 ---
 
 ## Stage 1 Features
 
 - **Ingestion & Immature Records**: Imports SOS CSV records, checking file-level hashes, byte-for-byte row content hashes, and composite duplicate keys. Preserves raw records on rollback.
-- **Identity Resolution**: DECUPLES exact Name + ZIP matches. Contributions are grouped into `ContributionCluster` records with low/medium/high confidence. Only verified clusters belonging to a verified `ContributorEntity` can yield authoritative member records.
+- **Identity Resolution**: DECOUPLES exact Name + ZIP matches. Contributions are grouped into `ContributionCluster` records with low/medium/high confidence. Only verified clusters belonging to a verified `ContributorEntity` can yield authoritative member records.
 - **Recurrence & Membership**: Calculates profile-level recurrence sequences (e.g. 20-40 day intervals, skip payments) and entity-level membership status (e.g. Active, Provisional, Lapsed).
 - **Dataset Coverage Check**: Prevents false "Lapsed" or "One-Time" statuses when the imported dataset is stale or incomplete, substituting provisional status descriptions.
 - **Non-destructive Rollback & Restore**: Restores pre-merge contribution cluster assignments when rollbacks are executed. Supports split-and-merge reversibility without deleting original records.
@@ -25,6 +25,26 @@ This is a secure, transaction-first, private web application designed to turn Ca
 - **Scoped Resolver Engine**: Grouping locations into 500-unit chunks, the resolver loads candidate places, postal areas, aliases, and associations matching only that chunk's keys.
 - **Cache Rebuild CLI Command**: Reconstructs Location cached geographic attributes from authoritative current resolutions. Clears stale cache values when no resolution exists and reports multiple-current-resolution corruption.
 - **PII Data Leak Protection**: Applies database-level `.values()` projections for geographers without roster permissions to prevent loading or hydrating sensitive personal data.
+
+---
+
+## Stage 2B Chapter Definitions & Assignment Engine
+
+- **Chapter Model & Rules**: Multi-target rules (`COUNTY`, `PLACE`, `POSTAL_AREA`, `INDIVIDUAL_OVERRIDE`) supporting `INCLUDE` and `EXCLUDE` modes.
+- **Generation-Based Evaluation Runs**: Atomic assignment generations (`ChapterEvaluationRun`) in `PREVIEW` or `APPLY` mode. The previous evaluation run remains authoritative throughout evaluation and after any failure.
+- **Conditional Unique Constraints**: Rules enforce unique target assignments based on type (`county_id`, `place_id`, `postal_area_id`, `contributor_entity_id`).
+- **Overlaps Aggregation**: Detects contributors matching multiple chapters simultaneously without silent duplication.
+- **Manual Overrides**: Documented inclusion/exclusion overrides with strict audit logging.
+
+---
+
+## Recent Fixes & Hardening
+
+- **Match-Level Confidence Escalation**: `ContributionCluster` confidence escalates from `LOW` -> `MEDIUM` -> `HIGH` on repeated corroborated matches, enabling auto-verification of established multi-payment donors.
+- **Duplicate Hash Ingestion**: Updated `ImportBatch.file_hash` handling to support re-uploading and reprocessing files with the `override_duplicate` flag without `IntegrityError` failures.
+- **Profile Decimal Type Mismatch**: Corrected arithmetic type mismatches in `person_profile` aggregates between `Decimal` sums and float fallbacks.
+- **Database-Agnostic Directory Filtering**: Replaced PostgreSQL-specific `DISTINCT ON` in directory queries with `Max('id')` subquery aggregation for 100% SQLite & PostgreSQL compatibility.
+- **Null-Safe Profile Assessments**: Added null safety to `profile.html` rendering when displaying unassessed contributor profiles.
 
 ---
 
@@ -46,13 +66,9 @@ WFP MemSearch/
 │   ├── services/           # Decoupled business logic
 │   │   ├── importer.py     # Ingestion & rollbacks
 │   │   ├── resolver.py     # Clustering & parsing
-│   │   └── membership.py   # Pattern & membership
+│   │   ├── membership.py   # Pattern & membership
+│   │   └── chapter_engine.py # Chapter assignment engine
 │   ├── tests/              # Automated unit tests
-│   │   ├── fixtures/
-│   │   │   └── synthetic_contributions.csv
-│   │   ├── test_importer.py
-│   │   ├── test_resolver.py
-│   │   └── test_membership.py
 │   └── models.py           # Django model definitions
 ├── manage.py
 ├── requirements.txt
@@ -81,11 +97,10 @@ python manage.py migrate
 ```
 
 ### 3. Create Admin Superuser
-To log into the roster dashboard, you must create a secure administrative account:
+To log into the roster dashboard, create an administrative account:
 ```bash
 python manage.py createsuperuser
 ```
-Follow the prompt instructions to configure your username and password.
 
 ### 4. Run Development Server
 ```bash
@@ -97,20 +112,19 @@ Navigate to [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your web browser
 
 ## Running Automated Tests
 
-To run the complete test suite (testing resolver name parsing, duplicate checking, rollbacks, and coverage limits):
+To run the complete test suite:
 ```bash
 python manage.py test
 ```
 
 ---
 
-## Secure Purging Command (Exceptional deletion)
+## Secure Purging Command
 
 To permanently delete an import batch and all cascades (use only under administrator supervision via CLI):
 ```bash
 python manage.py shell -c "from roster.services.importer import purge_batch; purge_batch(<batch_id>, actor='ADMIN')"
 ```
-This physically purges RawContribution, Contribution, locations, and batch records. Normal web-based rollbacks are non-destructive.
 
 ---
 
@@ -120,11 +134,3 @@ To rebuild cached geographic fields on `Location` records from authoritative cur
 ```bash
 python manage.py rebuild_location_geography_cache [--dry-run] [--actor <username>] [--location-ids <id1> <id2> ...] [--run-id <id>]
 ```
-Options:
-- `--dry-run`: Preview updates without committing changes to the database.
-- `--actor`: Log a custom actor name in the audit event.
-- `--location-ids`: Limit the rebuild to specific location IDs.
-- `--run-id`: Limit the rebuild to locations resolved in a specific resolution run.
-
-Stale locations with no current resolution will have their cache cleared, and any locations with multiple current resolutions (indicating database corruption) will be reported and skipped without changes.
-
