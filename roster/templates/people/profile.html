@@ -26,14 +26,18 @@
                 <label class="label">Inferred Membership Status</label>
                 <div class="control">
                     <span class="tag is-large 
-                        {% if latest_assessment.calculated_status == 'ACTIVE' %}tag-active
-                        {% elif latest_assessment.calculated_status == 'PROVISIONAL' %}tag-provisional
-                        {% elif latest_assessment.calculated_status == 'LIKELY' %}tag-likely
-                        {% elif latest_assessment.calculated_status == 'LAPSED' %}tag-lapsed
-                        {% elif latest_assessment.calculated_status == 'ONE_TIME' %}tag-onetime
-                        {% elif latest_assessment.calculated_status == 'DATASET_TOO_STALE' %}tag-stale
+                        {% if latest_assessment and latest_assessment.calculated_status == 'ACTIVE' %}tag-active
+                        {% elif latest_assessment and latest_assessment.calculated_status == 'PROVISIONAL' %}tag-provisional
+                        {% elif latest_assessment and latest_assessment.calculated_status == 'LIKELY' %}tag-likely
+                        {% elif latest_assessment and latest_assessment.calculated_status == 'LAPSED' %}tag-lapsed
+                        {% elif latest_assessment and latest_assessment.calculated_status == 'ONE_TIME' %}tag-onetime
+                        {% elif latest_assessment and latest_assessment.calculated_status == 'DATASET_TOO_STALE' %}tag-stale
                         {% else %}tag-unknown{% endif %}">
-                        {{ latest_assessment.get_calculated_status_display|default:latest_assessment.calculated_status }}
+                        {% if latest_assessment %}
+                            {{ latest_assessment.get_calculated_status_display|default:latest_assessment.calculated_status }}
+                        {% else %}
+                            Unassessed
+                        {% endif %}
                     </span>
                 </div>
             </div>

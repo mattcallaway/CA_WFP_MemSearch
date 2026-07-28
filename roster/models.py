@@ -23,7 +23,7 @@ class ImportBatch(models.Model):
     ]
 
     file_name = models.CharField(max_length=255)
-    file_hash = models.CharField(max_length=64, unique=True)
+    file_hash = models.CharField(max_length=64)
     file_type = models.CharField(max_length=50)
     import_date = models.DateTimeField(auto_now_add=True)
     imported_by = models.CharField(max_length=150)
