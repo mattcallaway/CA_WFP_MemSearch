@@ -105,8 +105,11 @@ class MembershipTestCase(TestCase):
         
         # Calculate entity membership
         status = evaluate_membership_for_entity(cluster1.contributor_entity_id, evaluation_date=date(2026, 7, 1))
-        # Status remains UNKNOWN/PROVISIONAL because it is unverified
-        self.assertEqual(status, 'UNKNOWN')
+        # Status receives PROVISIONAL (provisional recurrence pattern), NOT authoritative ACTIVE
+        self.assertEqual(status, 'PROVISIONAL')
+        ass = MembershipAssessment.objects.get(contributor_entity_id=cluster1.contributor_entity_id, is_current=True)
+        self.assertEqual(ass.membership_authority, 'PROVISIONAL')
+        self.assertFalse(ass.identity_verified_at_assessment)
 
     def test_voter_zip_move_timeline_aggregation(self):
         # One verified person moved ZIP codes: Name + ZIP A, Name + ZIP B
@@ -123,9 +126,15 @@ class MembershipTestCase(TestCase):
         entity1 = cluster1.contributor_entity
         entity2 = cluster2.contributor_entity
         
-        entity1.is_verified = True
+        entity1.verification_status = 'VERIFIED'
+        entity1.verification_method = 'ADMIN_REVIEW'
+        entity1.verified_at = date(2026, 1, 1)
+        entity1.verified_by = 'testadmin'
         entity1.save()
-        entity2.is_verified = True
+        entity2.verification_status = 'VERIFIED'
+        entity2.verification_method = 'ADMIN_REVIEW'
+        entity2.verified_at = date(2026, 1, 1)
+        entity2.verified_by = 'testadmin'
         entity2.save()
         
         # Merge cluster2 into cluster1 (making them share entity1)
@@ -152,7 +161,10 @@ class MembershipTestCase(TestCase):
         resolve_and_cluster_contribution(c3)
         
         entity = cluster.contributor_entity
-        entity.is_verified = True
+        entity.verification_status = 'VERIFIED'
+        entity.verification_method = 'ADMIN_REVIEW'
+        entity.verified_at = date(2026, 1, 1)
+        entity.verified_by = 'testadmin'
         entity.save()
         
         # Case A: Dataset is stale (coverage ends 2026-07-27, but we query 60 days later with a stale indicator)
@@ -170,3 +182,50 @@ class MembershipTestCase(TestCase):
         
         status = evaluate_membership_for_entity(entity.id, evaluation_date=date(2026, 7, 27))
         self.assertEqual(status, 'LAPSED')
+
+    def test_repeated_transactions_do_not_verify_identity(self):
+        c1 = self.create_contribution("ALVAREZ, CARLOS", 25.00, date(2026, 1, 10))
+        c2 = self.create_contribution("ALVAREZ, CARLOS", 25.00, date(2026, 2, 10))
+        c3 = self.create_contribution("ALVAREZ, CARLOS", 25.00, date(2026, 3, 10))
+        
+        cluster = resolve_and_cluster_contribution(c1)
+        resolve_and_cluster_contribution(c2)
+        resolve_and_cluster_contribution(c3)
+        
+        entity = ContributorEntity.objects.get(id=cluster.contributor_entity_id)
+        self.assertFalse(entity.is_verified)
+        self.assertEqual(entity.verification_status, 'UNVERIFIED')
+        self.assertEqual(entity.verification_method, 'NONE')
+
+    def test_membership_evaluator_is_read_only_with_respect_to_verification(self):
+        c1 = self.create_contribution("TEST, USER", 20.00, date(2026, 4, 1))
+        c2 = self.create_contribution("TEST, USER", 20.00, date(2026, 5, 1))
+        cluster = resolve_and_cluster_contribution(c1)
+        resolve_and_cluster_contribution(c2)
+        
+        entity = cluster.contributor_entity
+        self.assertFalse(entity.is_verified)
+        
+        evaluate_membership_for_entity(entity.id)
+        
+        entity.refresh_from_db()
+        self.assertFalse(entity.is_verified)
+        self.assertEqual(entity.verification_status, 'UNVERIFIED')
+
+    def test_unverified_entity_gets_provisional_status_and_authority(self):
+        c1 = self.create_contribution("PROVISIONAL, DONOR", 30.00, date(2026, 5, 1))
+        c2 = self.create_contribution("PROVISIONAL, DONOR", 30.00, date(2026, 6, 1))
+        c3 = self.create_contribution("PROVISIONAL, DONOR", 30.00, date(2026, 7, 1))
+        
+        cluster = resolve_and_cluster_contribution(c1)
+        resolve_and_cluster_contribution(c2)
+        resolve_and_cluster_contribution(c3)
+        
+        entity = cluster.contributor_entity
+        evaluate_membership_for_entity(entity.id, evaluation_date=date(2026, 7, 1))
+        
+        assessment = MembershipAssessment.objects.get(contributor_entity=entity, is_current=True)
+        self.assertEqual(assessment.calculated_status, 'PROVISIONAL')
+        self.assertEqual(assessment.membership_authority, 'PROVISIONAL')
+        self.assertEqual(assessment.recurrence_pattern_status, 'RECURRING_PATTERN')
+        self.assertFalse(assessment.identity_verified_at_assessment)

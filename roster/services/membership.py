@@ -206,7 +206,7 @@ def evaluate_membership_for_entity(entity_id, evaluation_date=None):
     assessment = MembershipAssessment.objects.filter(contributor_entity_id=entity_id).order_by('-calculation_date').first()
     return assessment.calculated_status if assessment else 'UNKNOWN'
 
-def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
+def evaluate_membership_for_entities(entity_ids, evaluation_date=None, actor='SYSTEM'):
     """
     Bulk evaluates membership status for multiple entities.
     """
@@ -229,6 +229,12 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
         ent_id = assign.contribution_cluster.contributor_entity_id
         entity_contribs.setdefault(ent_id, []).append(assign.contribution)
         
+    # Demote existing current assessments for these entities
+    MembershipAssessment.objects.filter(
+        contributor_entity_id__in=entity_ids,
+        is_current=True
+    ).update(is_current=False)
+
     assessments_to_create = []
     
     for entity in entities:
@@ -236,22 +242,11 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
             assessments_to_create.append(MembershipAssessment(
                 contributor_entity=entity,
                 calculated_status='UNKNOWN',
+                recurrence_pattern_status='INSUFFICIENT_HISTORY',
+                membership_authority='INELIGIBLE',
+                identity_verified_at_assessment=False,
+                is_current=True,
                 explanation=f"Non-individual entity ({entity.entity_type}) excluded from membership assessments.",
-                rule_version=rule
-            ))
-            continue
-            
-        if not entity.is_verified:
-            has_high_confidence = any(c.confidence_level == 'HIGH' for c in entity.clusters.all())
-            if has_high_confidence:
-                entity.is_verified = True
-                entity.save()
-                
-        if not entity.is_verified:
-            assessments_to_create.append(MembershipAssessment(
-                contributor_entity=entity,
-                calculated_status='UNKNOWN',
-                explanation="Contributor profile is provisional and requires administrative verification before membership status can be confirmed.",
                 rule_version=rule
             ))
             continue
@@ -264,9 +259,13 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
             eval_date = coverage.coverage_complete_through
             
         status = 'UNKNOWN'
+        pattern_status = 'INSUFFICIENT_HISTORY'
+        authority = 'PROVISIONAL'
         explanation = ""
         recurring_amount = 0.00
         payment_interval = ""
+        
+        is_verified = (entity.verification_status == 'VERIFIED' and entity.verification_method != 'NONE') or entity.is_verified
         
         is_coverage_complete = coverage.coverage_status in ['CONFIRMED_COMPLETE', 'APPARENTLY_CONTINUOUS']
         days_since_coverage = (date.today() - coverage.coverage_complete_through).days
@@ -274,20 +273,28 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
         
         if not net_timeline:
             status = 'UNKNOWN'
-            explanation = "No contributions found for this individual."
+            pattern_status = 'INSUFFICIENT_HISTORY'
+            explanation = "No active contributions found for this individual."
         elif len(net_timeline) == 1:
+            pattern_status = 'NO_RECURRING_PATTERN'
             last_payment = net_timeline[0]['date']
             days_since_payment = (eval_date - last_payment).days
-            if days_since_payment <= rule.active_grace_period:
-                status = 'PROVISIONAL'
-                explanation = f"New or provisional member: single contribution of ${net_timeline[0]['amount']:.2f} received on {last_payment}."
-            else:
-                if is_coverage_stale:
-                    status = 'DATASET_TOO_STALE'
-                    explanation = f"Single contribution received on {last_payment}, but dataset coverage is stale or incomplete (latest data through {coverage.coverage_complete_through})."
+            if is_verified:
+                authority = 'AUTHORITATIVE'
+                if days_since_payment <= rule.active_grace_period:
+                    status = 'PROVISIONAL'
+                    explanation = f"Verified member with single contribution of ${net_timeline[0]['amount']:.2f} received on {last_payment}."
                 else:
-                    status = 'ONE_TIME'
-                    explanation = f"One-time donor: single contribution of ${net_timeline[0]['amount']:.2f} received on {last_payment} (more than {rule.active_grace_period} days ago)."
+                    if is_coverage_stale:
+                        status = 'DATASET_TOO_STALE'
+                        explanation = f"Single contribution received on {last_payment}, but dataset coverage is stale (latest data through {coverage.coverage_complete_through})."
+                    else:
+                        status = 'ONE_TIME'
+                        explanation = f"One-time donor: single contribution of ${net_timeline[0]['amount']:.2f} received on {last_payment}."
+            else:
+                authority = 'PROVISIONAL'
+                status = 'UNKNOWN'
+                explanation = f"Unverified contributor with single contribution received on {last_payment}."
         else:
             intervals = []
             for i in range(1, len(net_timeline)):
@@ -309,27 +316,45 @@ def evaluate_membership_for_entities(entity_ids, evaluation_date=None):
             is_recent = days_since_last <= rule.active_grace_period
             
             if is_recurring:
+                pattern_status = 'RECURRING_PATTERN'
                 recent_payments = [item['amount'] for item in net_timeline[-3:]]
                 recurring_amount = sum(recent_payments) / len(recent_payments)
                 payment_interval = "Monthly"
                 
-                if is_recent:
-                    status = 'ACTIVE'
-                    explanation = f"Active member: {len(net_timeline)} contributions received. Last contribution was ${net_timeline[-1]['amount']:.2f} on {last_payment_date} ({days_since_last} days ago)."
-                else:
-                    if is_coverage_stale:
-                        status = 'PREVIOUSLY_RECURRING'
-                        explanation = f"Previously recurring member: last contribution was on {last_payment_date}, but current membership status cannot be verified because the available dataset is stale (coverage ends {coverage.coverage_complete_through})."
+                if is_verified:
+                    authority = 'AUTHORITATIVE'
+                    if is_recent:
+                        status = 'ACTIVE'
+                        explanation = f"Active verified member: {len(net_timeline)} contributions received. Last contribution was ${net_timeline[-1]['amount']:.2f} on {last_payment_date} ({days_since_last} days ago)."
                     else:
-                        status = 'LAPSED'
-                        explanation = f"Lapsed member: previously recurring, but last contribution was {days_since_last} days ago (limit {rule.active_grace_period} days)."
+                        if is_coverage_stale:
+                            status = 'PREVIOUSLY_RECURRING'
+                            explanation = f"Previously recurring member: last contribution was on {last_payment_date}, but coverage is stale."
+                        else:
+                            status = 'LAPSED'
+                            explanation = f"Lapsed member: previously recurring, last contribution was {days_since_last} days ago (limit {rule.active_grace_period} days)."
+                else:
+                    authority = 'PROVISIONAL'
+                    status = 'PROVISIONAL'
+                    explanation = f"Provisional recurring pattern: unverified identity with {len(net_timeline)} regular recurring contributions. Administrative verification required for authoritative active membership."
             else:
-                status = 'INSUFFICIENT_HISTORY'
-                explanation = f"Insufficient history: {len(net_timeline)} contributions received with irregular intervals: {', '.join(map(str, intervals))} days."
+                pattern_status = 'IRREGULAR_PATTERN'
+                if is_verified:
+                    authority = 'AUTHORITATIVE'
+                    status = 'INSUFFICIENT_HISTORY'
+                    explanation = f"Insufficient recurring history: {len(net_timeline)} contributions received with irregular intervals."
+                else:
+                    authority = 'PROVISIONAL'
+                    status = 'UNKNOWN'
+                    explanation = f"Unverified contributor with {len(net_timeline)} irregular contributions."
                 
         assessments_to_create.append(MembershipAssessment(
             contributor_entity=entity,
             calculated_status=status,
+            recurrence_pattern_status=pattern_status,
+            membership_authority=authority,
+            identity_verified_at_assessment=is_verified,
+            is_current=True,
             recurring_amount=recurring_amount,
             payment_interval=payment_interval,
             rule_version=rule,

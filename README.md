@@ -38,13 +38,14 @@ This is a secure, transaction-first, private web application designed to turn Ca
 
 ---
 
-## Recent Fixes & Hardening
+## Stage 2B.1 Identity and Import Integrity Repair
 
-- **Match-Level Confidence Escalation**: `ContributionCluster` confidence escalates from `LOW` -> `MEDIUM` -> `HIGH` on repeated corroborated matches, enabling auto-verification of established multi-payment donors.
-- **Duplicate Hash Ingestion**: Updated `ImportBatch.file_hash` handling to support re-uploading and reprocessing files with the `override_duplicate` flag without `IntegrityError` failures.
-- **Profile Decimal Type Mismatch**: Corrected arithmetic type mismatches in `person_profile` aggregates between `Decimal` sums and float fallbacks.
-- **Database-Agnostic Directory Filtering**: Replaced PostgreSQL-specific `DISTINCT ON` in directory queries with `Max('id')` subquery aggregation for 100% SQLite & PostgreSQL compatibility.
-- **Null-Safe Profile Assessments**: Added null safety to `profile.html` rendering when displaying unassessed contributor profiles.
+- **Decoupled Identity Verification**: Transaction recurrence and cluster confidence describe cluster cohesion and payment frequency. They NEVER automatically verify entity identity or promote unverified donors to authoritative active membership.
+- **Explicit Verification Provenance**: Adds `verification_status` (`UNVERIFIED`, `VERIFIED`), `verification_method` (`NONE`, `ADMIN_REVIEW`, `EXTERNAL_IDENTITY_MATCH`, `LEGACY_REVIEWED`), `verified_at`, `verified_by`, and `verification_evidence` fields with database check constraints.
+- **Provisional Recurrence Pattern Authority**: Unverified recurring donors receive `PROVISIONAL` membership status with `membership_authority = 'PROVISIONAL'` and `recurrence_pattern_status = 'RECURRING_PATTERN'`, preventing false claims of authoritative membership.
+- **1-to-1 Current Assessment Uniqueness**: `MembershipAssessment` enforces `unique_current_assessment_per_entity` DB constraint (`is_current=True`). Superseded historical assessments are retained with `is_current=False`.
+- **Reversible Repair Command**: `python manage.py repair_recurrence_identity_drift --dry-run` identifies and repairs entities auto-verified solely through cluster-confidence escalation.
+- **Canonical ImportBatch Constraint**: Restored `unique_completed_batch_file_hash` database constraint on `ImportBatch`. Duplicate file uploads create `ImportAttempt` audit records without altering `COMPLETED` batch lifecycles.
 
 ---
 
@@ -68,6 +69,9 @@ WFP MemSearch/
 │   │   ├── resolver.py     # Clustering & parsing
 │   │   ├── membership.py   # Pattern & membership
 │   │   └── chapter_engine.py # Chapter assignment engine
+│   ├── management/
+│   │   └── commands/       # CLI commands
+│   │       └── repair_recurrence_identity_drift.py
 │   ├── tests/              # Automated unit tests
 │   └── models.py           # Django model definitions
 ├── manage.py
@@ -119,18 +123,10 @@ python manage.py test
 
 ---
 
-## Secure Purging Command
+## Identity Drift Repair Command
 
-To permanently delete an import batch and all cascades (use only under administrator supervision via CLI):
+To preview or run the identity drift repair:
 ```bash
-python manage.py shell -c "from roster.services.importer import purge_batch; purge_batch(<batch_id>, actor='ADMIN')"
-```
-
----
-
-## Rebuild Geography Cache Command
-
-To rebuild cached geographic fields on `Location` records from authoritative current resolutions:
-```bash
-python manage.py rebuild_location_geography_cache [--dry-run] [--actor <username>] [--location-ids <id1> <id2> ...] [--run-id <id>]
+python manage.py repair_recurrence_identity_drift --dry-run --actor <username>
+python manage.py repair_recurrence_identity_drift --confirm --actor <username>
 ```

@@ -84,13 +84,10 @@ def imports_upload(request):
                 messages.error(request, "You do not have permission to override duplicate files.")
                 raise PermissionDenied("Lacks override_duplicate_file permission.")
     
-    # Create or update pending batch
+    # Create or reference canonical batch
     if is_duplicate:
-        # Reprocess uses the existing batch ID
+        # Reference canonical batch without setting status to PENDING until process is called
         batch = ImportBatch.objects.get(file_hash=file_hash, status='COMPLETED')
-        # Mark pending for previewing
-        batch.status = 'PENDING'
-        batch.save()
     else:
         batch, created = ImportBatch.objects.get_or_create(
             file_hash=file_hash,
@@ -101,11 +98,6 @@ def imports_upload(request):
                 'status': 'PENDING',
             }
         )
-        if not created:
-            # Existing batch was not COMPLETED, treat as new pending
-            batch.status = 'PENDING'
-            batch.save()
-        # Ensure batch has correct file_name if newly created
         if created:
             batch.file_name = csv_file.name
             batch.save()

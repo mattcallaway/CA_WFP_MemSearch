@@ -50,6 +50,18 @@
                 </article>
             {% endif %}
 
+            <div class="box mt-3 p-3 has-background-white-ter">
+                <p class="is-size-7"><strong>Verification Status:</strong> {{ entity.get_verification_status_display }}</p>
+                <p class="is-size-7"><strong>Verification Method:</strong> {{ entity.get_verification_method_display }}</p>
+                {% if latest_assessment %}
+                    <p class="is-size-7"><strong>Recurrence Pattern:</strong> {{ latest_assessment.get_recurrence_pattern_status_display }}</p>
+                    <p class="is-size-7"><strong>Membership Authority:</strong> {{ latest_assessment.get_membership_authority_display }}</p>
+                {% endif %}
+                {% if entity.verified_at %}
+                    <p class="is-size-7"><strong>Verified On:</strong> {{ entity.verified_at|date:"Y-m-d H:i" }} by {{ entity.verified_by|default:"System" }}</p>
+                {% endif %}
+            </div>
+
             <hr>
 
             <!-- Manual Override Form -->

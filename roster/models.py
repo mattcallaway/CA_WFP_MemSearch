@@ -34,6 +34,15 @@ class ImportBatch(models.Model):
     mapping_profile = models.ForeignKey(ImportMappingProfile, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["file_hash"],
+                condition=models.Q(status="COMPLETED"),
+                name="unique_completed_batch_file_hash"
+            )
+        ]
+
     def __str__(self):
         return f"{self.file_name} ({self.status} - {self.import_date.strftime('%Y-%m-%d')})"
 
@@ -72,12 +81,48 @@ class ContributorEntity(models.Model):
         ('UNKNOWN', 'Unknown'),
     ]
 
+    VERIFICATION_STATUS_CHOICES = [
+        ('UNVERIFIED', 'Unverified'),
+        ('VERIFIED', 'Verified'),
+    ]
+
+    VERIFICATION_METHOD_CHOICES = [
+        ('NONE', 'None'),
+        ('ADMIN_REVIEW', 'Administrative Review'),
+        ('EXTERNAL_IDENTITY_MATCH', 'External Identity Match'),
+        ('LEGACY_REVIEWED', 'Legacy Reviewed'),
+    ]
+
     entity_type = models.CharField(max_length=50, choices=ENTITY_TYPE_CHOICES, default='INDIVIDUAL')
     display_name = models.CharField(max_length=255)
     is_verified = models.BooleanField(default=False)
+    verification_status = models.CharField(max_length=50, choices=VERIFICATION_STATUS_CHOICES, default='UNVERIFIED')
+    verification_method = models.CharField(max_length=50, choices=VERIFICATION_METHOD_CHOICES, default='NONE')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.CharField(max_length=150, null=True, blank=True)
+    verification_evidence = models.JSONField(default=dict, blank=True)
+    verification_explanation = models.TextField(blank=True)
     data_quality_flags = models.JSONField(default=list, blank=True)
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(verification_status='UNVERIFIED') | models.Q(verification_method='NONE'),
+                name='check_unverified_method_none'
+            ),
+            models.CheckConstraint(
+                check=~models.Q(verification_status='VERIFIED') | ~models.Q(verification_method='NONE'),
+                name='check_verified_method_not_none'
+            ),
+            models.CheckConstraint(
+                check=~models.Q(verification_status='VERIFIED') | models.Q(verified_at__isnull=False),
+                name='check_verified_has_timestamp'
+            ),
+            models.CheckConstraint(
+                check=~models.Q(verification_method='ADMIN_REVIEW') | models.Q(verified_by__isnull=False),
+                name='check_admin_verified_has_actor'
+            ),
+        ]
         permissions = [
             ("view_sensitive_roster", "Can view sensitive roster information"),
             ("import_contributions", "Can upload and import contribution files"),
@@ -102,6 +147,11 @@ class ContributorEntity(models.Model):
             ("manage_chapter_overrides", "Can manage manual chapter overrides"),
             ("view_chapter_assignments", "Can view contributor chapter assignments"),
         ]
+
+    def save(self, *args, **kwargs):
+        # Keep is_verified boolean aligned with verification_status
+        self.is_verified = (self.verification_status == 'VERIFIED')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.display_name} ({self.entity_type} - Verified: {self.is_verified})"
@@ -249,8 +299,27 @@ class MembershipAssessment(models.Model):
         ('DATASET_TOO_STALE', 'Dataset Too Stale'),
     ]
 
+    RECURRENCE_PATTERN_CHOICES = [
+        ('RECURRING_PATTERN', 'Recurring Pattern'),
+        ('PREVIOUSLY_RECURRING_PATTERN', 'Previously Recurring Pattern'),
+        ('IRREGULAR_PATTERN', 'Irregular Pattern'),
+        ('INSUFFICIENT_HISTORY', 'Insufficient History'),
+        ('NO_RECURRING_PATTERN', 'No Recurring Pattern'),
+    ]
+
+    AUTHORITY_CHOICES = [
+        ('AUTHORITATIVE', 'Authoritative'),
+        ('PROVISIONAL', 'Provisional'),
+        ('INELIGIBLE', 'Ineligible'),
+    ]
+
     contributor_entity = models.ForeignKey(ContributorEntity, on_delete=models.CASCADE, related_name='membership_assessments')
     calculated_status = models.CharField(max_length=100, choices=STATUS_CHOICES)
+    recurrence_pattern_status = models.CharField(max_length=50, choices=RECURRENCE_PATTERN_CHOICES, default='INSUFFICIENT_HISTORY')
+    membership_authority = models.CharField(max_length=50, choices=AUTHORITY_CHOICES, default='PROVISIONAL')
+    identity_verified_at_assessment = models.BooleanField(default=False)
+    is_current = models.BooleanField(default=True, db_index=True)
+    superseded_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='supersedes')
     recurring_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     payment_interval = models.CharField(max_length=50, blank=True)
     rule_version = models.ForeignKey(MembershipRuleVersion, on_delete=models.PROTECT)
@@ -258,8 +327,17 @@ class MembershipAssessment(models.Model):
     manual_override = models.BooleanField(default=False)
     explanation = models.TextField(blank=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contributor_entity"],
+                condition=models.Q(is_current=True),
+                name="unique_current_assessment_per_entity"
+            )
+        ]
+
     def __str__(self):
-        return f"Assessment: Entity {self.contributor_entity_id} - {self.calculated_status}"
+        return f"Assessment: Entity {self.contributor_entity_id} - {self.calculated_status} ({self.membership_authority})"
 
 class Location(models.Model):
     PRECISION_CHOICES = [
