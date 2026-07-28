@@ -46,4 +46,26 @@ urlpatterns = [
     path('geography/resolve/<int:res_id>/', views.geography_manual_resolve, name='geography_manual_resolve'),
     path('geography/run/<int:run_id>/', views.geography_resolution_run_detail, name='geography_resolution_run_detail'),
     path('geography/run/execute/<int:run_id>/', views.geography_run_execute, name='geography_run_execute'),
+
+    # Chapters & Rule Engine (Stage 2B)
+    path('chapters/', views.chapter_list, name='chapter_list'),
+    path('chapters/<int:chapter_id>/', views.chapter_detail, name='chapter_detail'),
+    path('chapters/<int:chapter_id>/create-draft/', views.ruleset_create_draft, name='ruleset_create_draft'),
+    path('rulesets/<int:ruleset_id>/editor/', views.ruleset_editor, name='ruleset_editor'),
+    path('rulesets/<int:ruleset_id>/add-rule/', views.rule_create, name='rule_create'),
+    path('rulesets/<int:ruleset_id>/activate/', views.ruleset_activate, name='ruleset_activate'),
+    path('rulesets/<int:ruleset_id>/preview/', views.preview_execute, name='preview_execute'),
+    path('rulesets/<int:ruleset_id>/apply/', views.apply_execute, name='apply_execute'),
+    path('rules/deactivate/<int:rule_id>/', views.rule_deactivate, name='rule_deactivate'),
+    path('runs/<int:run_id>/', views.run_detail, name='run_detail'),
+    path('runs/<int:run_id>/preview/', views.preview_detail, name='preview_detail'),
+    
+    # Overlaps & Overrides
+    path('chapters/overlaps/', views.aggregate_overlaps, name='aggregate_overlaps'),
+    path('chapters/overlaps/named/', views.named_overlaps, name='named_overlaps'),
+    path('chapters/overrides/', views.override_search, name='override_search'),
+    path('chapters/overrides/create/', views.override_create, name='override_create'),
+    path('chapters/overrides/<int:override_id>/expire/', views.override_expiration, name='override_expiration'),
+    path('chapters/overrides/<int:override_id>/revoke/', views.override_revocation, name='override_revocation'),
+    path('assignments/<int:assignment_id>/', views.assignment_detail, name='assignment_detail'),
 ]

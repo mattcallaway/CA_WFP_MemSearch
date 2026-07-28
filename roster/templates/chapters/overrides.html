@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Manual Overrides</a></li>
+            </ul>
+        </nav>
+
+        <h1 class="title is-2">Chapter Entity Overrides</h1>
+        <p class="subtitle is-5 has-text-grey">
+            Manually force contributor entities to be included or excluded from chapters.
+        </p>
+
+        {% if messages %}
+            <div class="mb-5">
+                {% for message in messages %}
+                    <div class="notification is-{{ message.tags }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="columns">
+            <!-- Left: Search and Create Override -->
+            <div class="column is-5">
+                <div class="box">
+                    <h3 class="title is-4 mb-3">1. Search Contributor</h3>
+                    <form action="{% url 'override_search' %}" method="get" class="mb-4">
+                        <div class="field has-addons">
+                            <div class="control is-expanded">
+                                <input class="input" type="text" name="query" placeholder="Name or Entity ID..." value="{{ query }}">
+                            </div>
+                            <div class="control">
+                                <button type="submit" class="button is-link">Search</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    {% if entities %}
+                        <h4 class="title is-5 mb-2">Search Results</h4>
+                        <div class="list mb-4" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; border-radius: 4px;">
+                            {% for e in entities %}
+                                <div class="list-item py-2 px-2 border-bottom" style="cursor: pointer;" onclick="selectEntity('{{ e.id }}', '{{ e.display_name }}')">
+                                    <strong>{{ e.display_name }}</strong> (ID: {{ e.id }}) - <span class="is-size-7">{{ e.entity_type }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% elif query %}
+                        <p class="has-text-danger-dark mb-4">No results found for query.</p>
+                    {% endif %}
+
+                    <!-- Create Override Form (Enabled once an entity is clicked) -->
+                    <h3 class="title is-4 mb-3" id="formHeader">2. Define Override</h3>
+                    <form action="{% url 'override_create' %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="entity_id" id="formEntityId" required>
+                        
+                        <div class="field">
+                            <label class="label">Target Contributor</label>
+                            <div class="control">
+                                <input class="input" type="text" id="formEntityName" value="-- None Selected --" readonly style="background-color: #fafafa;">
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Select Chapter</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="chapter_id" required>
+                                        <option value="">-- Choose Chapter --</option>
+                                        {% for ch in chapters %}
+                                            <option value="{{ ch.id }}">{{ ch.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Override Type</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="override_type" required>
+                                        <option value="INCLUDE">Force Inclusion (INCLUDE)</option>
+                                        <option value="EXCLUDE">Force Exclusion (EXCLUDE)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Reason (Required)</label>
+                            <div class="control">
+                                <textarea class="textarea" name="reason" placeholder="e.g. Individual has requested North Bay alignment specifically." required rows="3"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="columns">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Effective Date</label>
+                                    <div class="control">
+                                        <input class="input" type="date" name="effective_date" value="2026-07-28" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Expiration (Optional)</label>
+                                    <div class="control">
+                                        <input class="input" type="date" name="expiration_date">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="button is-success is-fullwidth" id="submitBtn" disabled>
+                            Apply Manual Override
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right: Overrides List -->
+            <div class="column is-7">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Overrides History Log</h3>
+                    <div class="table-container">
+                        <table class="table is-striped is-fullwidth is-narrow">
+                            <thead>
+                                <tr>
+                                    <th>Contributor</th>
+                                    <th>Chapter</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Reason</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ov in overrides %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'person_profile' ov.contributor_entity_id %}">
+                                                <strong>{{ ov.contributor_entity.display_name }}</strong>
+                                            </a>
+                                        </td>
+                                        <td>{{ ov.chapter.name }}</td>
+                                        <td>
+                                            <span class="tag is-{% if ov.override_type == 'INCLUDE' %}success{% else %}danger{% endif %}">
+                                                {{ ov.override_type }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="tag is-{% if ov.status == 'ACTIVE' %}success{% elif ov.status == 'EXPIRED' %}warning{% elif ov.status == 'SUPERSEDED' %}light{% else %}dark{% endif %}">
+                                                {{ ov.status }}
+                                            </span>
+                                        </td>
+                                        <td class="is-size-7">{{ ov.reason }}</td>
+                                        <td>
+                                            {% if ov.status == 'ACTIVE' %}
+                                                <div class="buttons">
+                                                    <form action="{% url 'override_expiration' ov.id %}" method="post" style="display:inline;" class="mr-1">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="button is-warning is-small">Expire</button>
+                                                    </form>
+                                                    <form action="{% url 'override_revocation' ov.id %}" method="post" style="display:inline;">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="button is-danger is-small">Revoke</button>
+                                                    </form>
+                                                </div>
+                                            {% else %}
+                                                <span class="has-text-grey is-size-7">Closed</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="has-text-centered has-text-grey py-5">
+                                            No manual overrides registered in database.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    function selectEntity(id, name) {
+        document.getElementById('formEntityId').value = id;
+        document.getElementById('formEntityName').value = name + " (ID: " + id + ")";
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('formHeader').scrollIntoView({behavior: 'smooth'});
+    }
+</script>
+{% endblock %}

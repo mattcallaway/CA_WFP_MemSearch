@@ -119,6 +119,11 @@
                         </div>
                     </div>
                     {% endif %}
+                    {% if perms.roster.view_chapter_definitions %}
+                    <a class="navbar-item" href="{% url 'chapter_list' %}">
+                        Chapters
+                    </a>
+                    {% endif %}
                 </div>
 
                 <div class="navbar-end">

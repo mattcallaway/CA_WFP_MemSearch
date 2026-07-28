@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Chapter Overlaps</a></li>
+            </ul>
+        </nav>
+
+        <div class="columns is-vcentered mb-5">
+            <div class="column">
+                <h1 class="title is-2">Chapter Overlaps Analysis</h1>
+                <p class="subtitle is-5 has-text-grey">
+                    View entities geographically included or provisionally included in multiple active chapters.
+                </p>
+            </div>
+            <div class="column is-narrow">
+                {% if perms.roster.view_chapter_assignments and perms.roster.view_sensitive_roster %}
+                    <a href="{% url 'named_overlaps' %}" class="button is-link">
+                        <span>View Named Overlaps</span>
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="columns">
+            <!-- Total Overlaps Box -->
+            <div class="column is-4">
+                <div class="box has-text-centered py-6">
+                    <p class="heading">Total Overlapping Entities</p>
+                    <p class="title is-1 has-text-warning-dark">{{ total_overlaps }}</p>
+                    <p class="is-size-7 has-text-grey">Contributors belonging to two or more chapters geographically.</p>
+                </div>
+            </div>
+
+            <!-- Pairwise Intersections Matrix Table -->
+            <div class="column is-8">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Pairwise Chapter Overlap Matrix</h3>
+                    <div class="table-container">
+                        <table class="table is-striped is-fullwidth">
+                            <thead>
+                                <tr>
+                                    <th>Chapter A</th>
+                                    <th>Chapter B</th>
+                                    <th>Overlapping Entities Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in overlap_data %}
+                                    <tr>
+                                        <td><strong>{{ row.chapter_1 }}</strong></td>
+                                        <td><strong>{{ row.chapter_2 }}</strong></td>
+                                        <td>
+                                            <span class="tag is-warning is-medium">
+                                                {{ row.count }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="has-text-centered has-text-grey py-5">
+                                            No pairwise chapter overlaps detected in current generations.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

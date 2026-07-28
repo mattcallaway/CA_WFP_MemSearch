@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li><a href="{% url 'chapter_detail' ruleset.chapter_id %}">{{ ruleset.chapter.name }}</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Ruleset Editor v{{ ruleset.version }}</a></li>
+            </ul>
+        </nav>
+
+        <div class="columns is-vcentered mb-5">
+            <div class="column">
+                <h1 class="title is-2">Ruleset Editor (v{{ ruleset.version }})</h1>
+                <p class="subtitle is-5 has-text-grey">Configure inclusion/exclusion rules for chapter <strong>{{ ruleset.chapter.name }}</strong>.</p>
+            </div>
+            <div class="column is-narrow">
+                <div class="buttons">
+                    <form action="{% url 'preview_execute' ruleset.id %}" method="post" class="mr-2">
+                        {% csrf_token %}
+                        <button type="submit" class="button is-warning">
+                            <span class="icon"><i class="fas fa-eye"></i></span>
+                            <span>Run Preview</span>
+                        </button>
+                    </form>
+                    {% if perms.roster.activate_chapter_rules %}
+                        <form action="{% url 'ruleset_activate' ruleset.id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="button is-success" onclick="return confirm('Are you sure you want to activate this ruleset? This will stage an APPLY run and supersede any existing ruleset.');">
+                                <span>Activate Ruleset</span>
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if messages %}
+            <div class="mb-5">
+                {% for message in messages %}
+                    <div class="notification is-{{ message.tags }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="columns">
+            <!-- Left: Add New Rule Form -->
+            <div class="column is-4">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Add Geographic Rule</h3>
+                    <form action="{% url 'rule_create' ruleset.id %}" method="post">
+                        {% csrf_token %}
+                        
+                        <div class="field">
+                            <label class="label">Rule Effect</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="effect" required>
+                                        <option value="INCLUDE">Inclusion (INCLUDE)</option>
+                                        <option value="EXCLUDE">Exclusion (EXCLUDE)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Target Geography Type</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="target_type" id="targetTypeSelect" required onchange="toggleTargetSelector(this.value)">
+                                        <option value="COUNTY">County</option>
+                                        <option value="PLACE">Place (City/Locality)</option>
+                                        <option value="POSTAL_AREA">Postal Area (ZIP/ZCTA)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Target ID Selectors (switched by Javascript) -->
+                        <div class="field" id="countyField">
+                            <label class="label">Select County</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="target_id_county" id="countySelect">
+                                        <option value="">-- Choose County --</option>
+                                        {% for c in counties %}
+                                            <option value="{{ c.id }}">{{ c.display_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field" id="placeField" style="display:none;">
+                            <label class="label">Select Place</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="target_id_place" id="placeSelect">
+                                        <option value="">-- Choose Place --</option>
+                                        {% for p in places %}
+                                            <option value="{{ p.id }}">{{ p.canonical_name }} ({{ p.state_code }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field" id="postalField" style="display:none;">
+                            <label class="label">Select Postal Area</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="target_id_postal" id="postalSelect">
+                                        <option value="">-- Choose Postal --</option>
+                                        {% for po in postals %}
+                                            <option value="{{ po.id }}">{{ po.postal_code }} ({{ po.postal_area_type }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="target_id" id="hiddenTargetId" value="">
+
+                        <div class="field">
+                            <label class="label">Display Order</label>
+                            <div class="control">
+                                <input class="input" type="number" name="display_order" value="10" required>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Description / Internal Notes</label>
+                            <div class="control">
+                                <textarea class="textarea" name="description" placeholder="e.g. Sonoma County rule inclusion" rows="2"></textarea>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="button is-link is-fullwidth" onclick="prepareSubmit()">
+                            Add Rule
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right: Rules List -->
+            <div class="column is-8">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Draft Rules Checklist</h3>
+                    <div class="table-container">
+                        <table class="table is-striped is-fullwidth">
+                            <thead>
+                                <tr>
+                                    <th>Effect</th>
+                                    <th>Target Type</th>
+                                    <th>Value</th>
+                                    <th>Description</th>
+                                    <th>Order</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rule in rules %}
+                                    <tr>
+                                        <td>
+                                            <span class="tag is-{% if rule.effect == 'INCLUDE' %}success{% else %}danger{% endif %}">
+                                                {{ rule.effect }}
+                                            </span>
+                                        </td>
+                                        <td>{{ rule.target_type }}</td>
+                                        <td>
+                                            <strong>
+                                                {% if rule.target_type == 'COUNTY' %}
+                                                    {{ rule.county.display_name }}
+                                                {% elif rule.target_type == 'PLACE' %}
+                                                    {{ rule.place.canonical_name }}
+                                                {% elif rule.target_type == 'POSTAL_AREA' %}
+                                                    {{ rule.postal_area.postal_code }} ({{ rule.postal_area.postal_area_type }})
+                                                {% endif %}
+                                            </strong>
+                                        </td>
+                                        <td>{{ rule.description }}</td>
+                                        <td>{{ rule.display_order }}</td>
+                                        <td>
+                                            <form action="{% url 'rule_deactivate' rule.id %}" method="post">
+                                                {% csrf_token %}
+                                                <button type="submit" class="button is-danger is-light is-small">
+                                                    Remove
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="has-text-centered has-text-grey py-5">
+                                            No rules added to this draft yet. Use the sidebar to create geographic inclusion and exclusion rules.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    function toggleTargetSelector(val) {
+        document.getElementById('countyField').style.display = val === 'COUNTY' ? 'block' : 'none';
+        document.getElementById('placeField').style.display = val === 'PLACE' ? 'block' : 'none';
+        document.getElementById('postalField').style.display = val === 'POSTAL_AREA' ? 'block' : 'none';
+    }
+
+    function prepareSubmit() {
+        var type = document.getElementById('targetTypeSelect').value;
+        var targetId = "";
+        if (type === 'COUNTY') {
+            targetId = document.getElementById('countySelect').value;
+        } else if (type === 'PLACE') {
+            targetId = document.getElementById('placeSelect').value;
+        } else if (type === 'POSTAL_AREA') {
+            targetId = document.getElementById('postalSelect').value;
+        }
+        document.getElementById('hiddenTargetId').value = targetId;
+    }
+</script>
+{% endblock %}

@@ -38,9 +38,9 @@ class RBACTestCase(TestCase):
         initial_manager = self.datamanager_group.permissions.count()
         initial_admin = self.admin_group.permissions.count()
         
-        self.assertEqual(initial_readonly, 3)
-        self.assertEqual(initial_manager, 13)
-        self.assertEqual(initial_admin, 15)
+        self.assertEqual(initial_readonly, 4)
+        self.assertEqual(initial_manager, 19)
+        self.assertEqual(initial_admin, 22)
         
         # Add unrelated manually assigned permission to Read-only group
         unrelated_perm = Permission.objects.filter(content_type=ContentType.objects.get_for_model(User)).first()
@@ -55,9 +55,9 @@ class RBACTestCase(TestCase):
         
         # Verify managed counts remain identical
         managed_readonly = self.readonly_group.permissions.filter(content_type=self.entity_ct).count()
-        self.assertEqual(managed_readonly, 3)
-        self.assertEqual(self.datamanager_group.permissions.filter(content_type=self.entity_ct).count(), 13)
-        self.assertEqual(self.admin_group.permissions.filter(content_type=self.entity_ct).count(), 15)
+        self.assertEqual(managed_readonly, 4)
+        self.assertEqual(self.datamanager_group.permissions.filter(content_type=self.entity_ct).count(), 19)
+        self.assertEqual(self.admin_group.permissions.filter(content_type=self.entity_ct).count(), 22)
         
         # Verify unrelated manually added permission was preserved
         self.assertTrue(self.readonly_group.permissions.filter(id=unrelated_perm.id).exists())

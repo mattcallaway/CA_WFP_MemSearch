@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li><a href="{% url 'aggregate_overlaps' %}">Overlaps</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Named Overlaps</a></li>
+            </ul>
+        </nav>
+
+        <h1 class="title is-2">Overlapping Contributors Detail</h1>
+        <p class="subtitle is-5 has-text-grey">
+            List of contributor entities matching more than one regional chapter.
+        </p>
+
+        <div class="box">
+            <div class="table-container">
+                <table class="table is-striped is-fullwidth is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Entity ID</th>
+                            <th>Display Name</th>
+                            <th>Matched Chapters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in overlaps %}
+                            <tr>
+                                <td>{{ row.entity.id }}</td>
+                                <td>
+                                    <a href="{% url 'person_profile' row.entity.id %}">
+                                        <strong>{{ row.entity.display_name }}</strong>
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="tags">
+                                        {% for ch in row.chapters %}
+                                            <span class="tag is-info is-light">{{ ch }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="3" class="has-text-centered has-text-grey py-5">
+                                    No overlapping contributor entities found.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

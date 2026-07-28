@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li><a href="{% url 'chapter_detail' chapter.id %}">{{ chapter.name }}</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Preview Run #{{ run.id }} Differences</a></li>
+            </ul>
+        </nav>
+
+        <div class="columns is-vcentered mb-5">
+            <div class="column">
+                <h1 class="title is-2">Preview Differences (Run #{{ run.id }})</h1>
+                <p class="subtitle is-5 has-text-grey">
+                    Comparing draft ruleset v{{ run.rule_set.version }} outcomes against chapter current assignments generation.
+                </p>
+            </div>
+            <div class="column is-narrow">
+                {% if perms.roster.activate_chapter_rules %}
+                    <form action="{% url 'ruleset_activate' run.rule_set_id %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="button is-success" onclick="return confirm('Are you sure you want to activate this ruleset? This will stage an APPLY run and supersede any existing ruleset.');">
+                            Activate Ruleset
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Aggregate Summary Box -->
+        <div class="box">
+            <h3 class="title is-4 mb-4">Aggregate Difference Analysis</h3>
+            <div class="columns">
+                <div class="column has-text-centered border-right">
+                    <p class="heading">New Inclusions</p>
+                    <p class="title has-text-success">{{ new_inclusions|length }}</p>
+                </div>
+                <div class="column has-text-centered border-right">
+                    <p class="heading">Removed Inclusions</p>
+                    <p class="title has-text-danger">{{ removed_inclusions|length }}</p>
+                </div>
+                <div class="column has-text-centered border-right">
+                    <p class="heading">New Exclusions</p>
+                    <p class="title has-text-danger">{{ new_exclusions|length }}</p>
+                </div>
+                <div class="column has-text-centered border-right">
+                    <p class="heading">New Ambiguity</p>
+                    <p class="title has-text-warning-dark">{{ new_ambiguity|length }}</p>
+                </div>
+                <div class="column has-text-centered">
+                    <p class="heading">Decisive Rule Changes</p>
+                    <p class="title has-text-info">{{ decisive_rule_changes|length }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% if not can_view_identity %}
+            <div class="notification is-warning is-light">
+                <span class="icon"><i class="fas fa-lock"></i></span>
+                <strong>PII Redaction Active:</strong> You possess `preview_chapter_rules` permission but do not have `view_sensitive_roster`. Contributor names, street addresses, and individual identifiers are hidden.
+            </div>
+        {% else %}
+            <!-- Detailed Differential Tables -->
+            <div class="columns is-multiline">
+                {% if new_inclusions %}
+                    <div class="column is-6">
+                        <div class="box">
+                            <h4 class="title is-5 has-text-success">New Inclusions</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table is-striped is-fullwidth is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity ID</th>
+                                            <th>Name</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in new_inclusions %}
+                                            <tr>
+                                                <td>{{ item.entity_id }}</td>
+                                                <td>{{ item.name }}</td>
+                                                <td><span class="tag is-success is-light">{{ item.status }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if removed_inclusions %}
+                    <div class="column is-6">
+                        <div class="box">
+                            <h4 class="title is-5 has-text-danger">Removed Inclusions</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table is-striped is-fullwidth is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity ID</th>
+                                            <th>Name</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in removed_inclusions %}
+                                            <tr>
+                                                <td>{{ item.entity_id }}</td>
+                                                <td>{{ item.name }}</td>
+                                                <td><span class="tag is-danger is-light">{{ item.status }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if new_exclusions %}
+                    <div class="column is-6">
+                        <div class="box">
+                            <h4 class="title is-5 has-text-danger">New Exclusions</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table is-striped is-fullwidth is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity ID</th>
+                                            <th>Name</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in new_exclusions %}
+                                            <tr>
+                                                <td>{{ item.entity_id }}</td>
+                                                <td>{{ item.name }}</td>
+                                                <td><span class="tag is-danger is-light">{{ item.status }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if new_ambiguity %}
+                    <div class="column is-6">
+                        <div class="box">
+                            <h4 class="title is-5 has-text-warning-dark">New Ambiguity</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table is-striped is-fullwidth is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity ID</th>
+                                            <th>Name</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in new_ambiguity %}
+                                            <tr>
+                                                <td>{{ item.entity_id }}</td>
+                                                <td>{{ item.name }}</td>
+                                                <td><span class="tag is-warning is-light">{{ item.status }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if decisive_rule_changes %}
+                    <div class="column is-12">
+                        <div class="box">
+                            <h4 class="title is-5 has-text-info">Decisive Rule Changes</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table is-striped is-fullwidth is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity ID</th>
+                                            <th>Name</th>
+                                            <th>Old Decisive Rule</th>
+                                            <th>New Decisive Rule</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in decisive_rule_changes %}
+                                            <tr>
+                                                <td>{{ item.entity_id }}</td>
+                                                <td>{{ item.name }}</td>
+                                                <td><span class="tag is-light">{{ item.old_rule }}</span></td>
+                                                <td><span class="tag is-info is-light">{{ item.new_rule }}</span></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

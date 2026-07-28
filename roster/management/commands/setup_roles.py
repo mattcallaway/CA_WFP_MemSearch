@@ -23,7 +23,14 @@ class Command(BaseCommand):
             'import_geography_reference',
             'manage_geography_reference',
             'rollback_geography_import',
-            'resolve_geography_ambiguity'
+            'resolve_geography_ambiguity',
+            'view_chapter_definitions',
+            'manage_chapter_definitions',
+            'preview_chapter_rules',
+            'activate_chapter_rules',
+            'evaluate_chapter_rules',
+            'manage_chapter_overrides',
+            'view_chapter_assignments'
         ]
 
         entity_ct = ContentType.objects.get_for_model(ContributorEntity)
@@ -42,7 +49,8 @@ class Command(BaseCommand):
             'Read-only': [
                 'view_sensitive_roster',
                 'view_audit',
-                'view_geography_reference'
+                'view_geography_reference',
+                'view_chapter_definitions'
             ],
             'Data manager': [
                 'view_sensitive_roster',
@@ -57,7 +65,13 @@ class Command(BaseCommand):
                 'import_geography_reference',
                 'manage_geography_reference',
                 'rollback_geography_import',
-                'resolve_geography_ambiguity'
+                'resolve_geography_ambiguity',
+                'view_chapter_definitions',
+                'manage_chapter_definitions',
+                'preview_chapter_rules',
+                'activate_chapter_rules',
+                'evaluate_chapter_rules',
+                'manage_chapter_overrides'
             ],
             'Administrator': managed_codenames
         }

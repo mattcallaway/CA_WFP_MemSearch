@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li><a href="{% url 'chapter_detail' run.chapter_id %}">{{ run.chapter.name }}</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Run #{{ run.id }} Detail</a></li>
+            </ul>
+        </nav>
+
+        <h1 class="title is-2">Evaluation Run #{{ run.id }}</h1>
+        <p class="subtitle is-5 has-text-grey">
+            Detailed overview of evaluation execution for chapter <strong>{{ run.chapter.name }}</strong>.
+        </p>
+
+        <div class="columns">
+            <!-- Left: Metadata Snapshot -->
+            <div class="column is-4">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Frozen Snapshot Settings</h3>
+                    
+                    <div class="field mb-3">
+                        <label class="label mb-1">Status</label>
+                        <span class="tag is-{% if run.status == 'COMPLETED' %}success{% elif run.status == 'PENDING' %}warning{% elif run.status == 'FAILED' %}danger{% else %}light{% endif %} is-medium">
+                            {{ run.status }}
+                        </span>
+                    </div>
+
+                    <div class="field mb-3">
+                        <label class="label mb-1">Mode & Trigger</label>
+                        <span class="tag is-info is-light">{{ run.run_mode }}</span>
+                        <span class="tag is-dark is-light">{{ run.trigger_type }}</span>
+                    </div>
+
+                    <div class="field mb-3">
+                        <label class="label mb-1">Ruleset Version</label>
+                        <strong>v{{ run.rule_set.version }}</strong> (Status: {{ run.rule_set.status }})
+                    </div>
+
+                    <div class="field mb-3">
+                        <label class="label mb-1">Resolver & Engine Versions</label>
+                        Resolver: <code>v{{ run.resolver_version }}</code><br>
+                        Chapter Engine: <code>v{{ run.evaluation_engine_version }}</code>
+                    </div>
+
+                    <div class="field mb-3">
+                        <label class="label mb-1">Geography Datasets Snapshot</label>
+                        <pre style="padding: 0.5rem; font-size: 0.8rem;">{{ run.geography_dataset_snapshot|default:"{}" }}</pre>
+                    </div>
+
+                    <div class="field mb-3">
+                        <label class="label mb-1">Timestamps</label>
+                        <span class="is-size-7">
+                            Started: {{ run.started_time|date:"Y-m-d H:i:s"|default:"Pending" }}<br>
+                            Completed: {{ run.completed_time|date:"Y-m-d H:i:s"|default:"Running" }}
+                        </span>
+                    </div>
+
+                    {% if run.retry_of %}
+                        <div class="notification is-info is-light">
+                            This run is a retry of failed run <a href="{% url 'run_detail' run.retry_of_id %}">#{{ run.retry_of_id }}</a>.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Right: Performance and Error Summary -->
+            <div class="column is-8">
+                <!-- Aggregate Counts -->
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Run Outcome Statistics</h3>
+                    <div class="columns is-multiline">
+                        <div class="column is-4 has-text-centered border-right">
+                            <p class="heading">Entities Evaluated</p>
+                            <p class="title">{{ run.entities_considered }}</p>
+                        </div>
+                        <div class="column is-4 has-text-centered border-right">
+                            <p class="heading">Included</p>
+                            <p class="title has-text-success">{{ run.included_count }}</p>
+                        </div>
+                        <div class="column is-4 has-text-centered">
+                            <p class="heading">Excluded</p>
+                            <p class="title has-text-danger">{{ run.excluded_count }}</p>
+                        </div>
+                        <div class="column is-4 has-text-centered border-right">
+                            <p class="heading">Ambiguous</p>
+                            <p class="title has-text-warning-dark">{{ run.ambiguous_count }}</p>
+                        </div>
+                        <div class="column is-4 has-text-centered border-right">
+                            <p class="heading">Unresolved / No Match</p>
+                            <p class="title has-text-grey">{{ run.unresolved_count }}</p>
+                        </div>
+                        <div class="column is-4 has-text-centered">
+                            <p class="heading">Errors</p>
+                            <p class="title has-text-danger">{{ run.error_count }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {% if run.status == 'FAILED' %}
+                    <div class="box has-background-danger-light">
+                        <h3 class="title is-4 has-text-danger-dark mb-3">Error Summary</h3>
+                        <article class="message is-danger">
+                            <div class="message-body" style="font-family: monospace;">
+                                {{ run.error_summary }}
+                            </div>
+                        </article>
+                    </div>
+                {% endif %}
+
+                {% if run.status == 'PENDING' and perms.roster.evaluate_chapter_rules %}
+                    <div class="box">
+                        <h3 class="title is-4 mb-3">Pending Execution Run</h3>
+                        <p class="mb-4">This evaluation run is staged as PENDING and has not executed yet. Triggering this will process all entities against draft v{{ run.rule_set.version }} and promote it as the new generation cache.</p>
+                        <form action="{% url 'apply_execute' run.rule_set_id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="button is-success is-medium is-fullwidth">
+                                Run Evaluation & Promote Cache
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

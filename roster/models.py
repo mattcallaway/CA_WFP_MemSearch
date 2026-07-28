@@ -94,6 +94,13 @@ class ContributorEntity(models.Model):
             ("manage_geography_reference", "Can manage and activate geographic references"),
             ("rollback_geography_import", "Can roll back and restore geographic imports"),
             ("resolve_geography_ambiguity", "Can resolve ambiguous or conflicting contributor locations"),
+            ("view_chapter_definitions", "Can view chapter definitions"),
+            ("manage_chapter_definitions", "Can manage chapter definitions"),
+            ("preview_chapter_rules", "Can run previews of chapter rules"),
+            ("activate_chapter_rules", "Can activate chapter rule sets"),
+            ("evaluate_chapter_rules", "Can run apply evaluations for chapters"),
+            ("manage_chapter_overrides", "Can manage manual chapter overrides"),
+            ("view_chapter_assignments", "Can view contributor chapter assignments"),
         ]
 
     def __str__(self):
@@ -908,3 +915,386 @@ class GeographyResolutionCandidate(models.Model):
 
     def __str__(self):
         return f"Candidate for Res {self.location_resolution_id}"
+
+
+class Chapter(models.Model):
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('ARCHIVED', 'Archived'),
+    ]
+
+    name = models.CharField(max_length=255, unique=True)
+    slug = models.SlugField(max_length=255, unique=True)
+    short_name = models.CharField(max_length=50, blank=True)
+    description = models.TextField(blank=True)
+    state_code = models.CharField(max_length=2, default='CA')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='DRAFT')
+    effective_date = models.DateField(null=True, blank=True)
+    retired_date = models.DateField(null=True, blank=True)
+    created_by = models.CharField(max_length=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    current_evaluation_run = models.ForeignKey(
+        'ChapterEvaluationRun', null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.status})"
+
+
+class ChapterRuleSet(models.Model):
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('VALIDATING', 'Validating'),
+        ('ACTIVE', 'Active'),
+        ('SUPERSEDED', 'Superseded'),
+        ('RETIRED', 'Retired'),
+        ('INVALID', 'Invalid'),
+    ]
+
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='rule_sets')
+    version = models.IntegerField(default=1)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='DRAFT')
+    description = models.TextField(blank=True)
+    include_match_mode = models.CharField(max_length=50, default='ANY')
+    created_by = models.CharField(max_length=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+    activated_by = models.CharField(max_length=150, null=True, blank=True)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    superseded_at = models.DateTimeField(null=True, blank=True)
+    validation_summary = models.TextField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["chapter", "version"],
+                name="unique_ruleset_version_per_chapter"
+            ),
+            models.UniqueConstraint(
+                fields=["chapter"],
+                condition=models.Q(status="ACTIVE"),
+                name="unique_active_ruleset_per_chapter"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.chapter.name} Ruleset v{self.version} ({self.status})"
+
+
+class ChapterRule(models.Model):
+    EFFECT_CHOICES = [
+        ('INCLUDE', 'Include'),
+        ('EXCLUDE', 'Exclude'),
+    ]
+
+    TARGET_CHOICES = [
+        ('COUNTY', 'County'),
+        ('PLACE', 'Place'),
+        ('POSTAL_AREA', 'Postal Area'),
+    ]
+
+    rule_set = models.ForeignKey(ChapterRuleSet, on_delete=models.CASCADE, related_name='rules')
+    effect = models.CharField(max_length=50, choices=EFFECT_CHOICES)
+    target_type = models.CharField(max_length=50, choices=TARGET_CHOICES)
+    county = models.ForeignKey(County, null=True, blank=True, on_delete=models.CASCADE)
+    place = models.ForeignKey(GeographicPlace, null=True, blank=True, on_delete=models.CASCADE)
+    postal_area = models.ForeignKey(PostalArea, null=True, blank=True, on_delete=models.CASCADE)
+    description = models.TextField(blank=True)
+    display_order = models.IntegerField(default=10)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (models.Q(county__isnull=False) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=True)) |
+                    (models.Q(county__isnull=True) & models.Q(place__isnull=False) & models.Q(postal_area__isnull=True)) |
+                    (models.Q(county__isnull=True) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=False))
+                ),
+                name="check_target_mutually_exclusive"
+            ),
+            models.CheckConstraint(
+                check=~models.Q(target_type="COUNTY") | (models.Q(county__isnull=False) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=True)),
+                name="check_target_type_county"
+            ),
+            models.CheckConstraint(
+                check=~models.Q(target_type="PLACE") | (models.Q(county__isnull=True) & models.Q(place__isnull=False) & models.Q(postal_area__isnull=True)),
+                name="check_target_type_place"
+            ),
+            models.CheckConstraint(
+                check=~models.Q(target_type="POSTAL_AREA") | (models.Q(county__isnull=True) & models.Q(place__isnull=True) & models.Q(postal_area__isnull=False)),
+                name="check_target_type_postal"
+            ),
+            models.UniqueConstraint(
+                fields=["rule_set", "effect", "county"],
+                condition=models.Q(is_active=True, target_type="COUNTY"),
+                name="unique_active_county_rule"
+            ),
+            models.UniqueConstraint(
+                fields=["rule_set", "effect", "place"],
+                condition=models.Q(is_active=True, target_type="PLACE"),
+                name="unique_active_place_rule"
+            ),
+            models.UniqueConstraint(
+                fields=["rule_set", "effect", "postal_area"],
+                condition=models.Q(is_active=True, target_type="POSTAL_AREA"),
+                name="unique_active_postal_rule"
+            )
+        ]
+
+    def __str__(self):
+        target = self.county or self.place or self.postal_area
+        return f"{self.effect} {self.target_type}: {target} (Ruleset v{self.rule_set.version})"
+
+
+class ChapterEntityOverride(models.Model):
+    OVERRIDE_CHOICES = [
+        ('INCLUDE', 'Include'),
+        ('EXCLUDE', 'Exclude'),
+    ]
+
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('EXPIRED', 'Expired'),
+        ('SUPERSEDED', 'Superseded'),
+        ('REVOKED', 'Revoked'),
+    ]
+
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='overrides')
+    contributor_entity = models.ForeignKey(ContributorEntity, on_delete=models.CASCADE, related_name='chapter_overrides')
+    override_type = models.CharField(max_length=50, choices=OVERRIDE_CHOICES)
+    reason = models.TextField()
+    effective_date = models.DateField()
+    expiration_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='ACTIVE')
+    created_by = models.CharField(max_length=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+    superseded_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='supersedes')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gte=models.F('effective_date')),
+                name="check_override_expiration"
+            ),
+            models.UniqueConstraint(
+                fields=["chapter", "contributor_entity"],
+                condition=models.Q(status="ACTIVE"),
+                name="unique_active_override_per_chapter_and_entity"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.override_type} Override for Entity {self.contributor_entity_id} on {self.chapter.name} ({self.status})"
+
+
+class ChapterEvaluationRun(models.Model):
+    MODE_CHOICES = [
+        ('PREVIEW', 'Preview'),
+        ('APPLY', 'Apply'),
+    ]
+
+    TRIGGER_CHOICES = [
+        ('RULE_SET_ACTIVATION', 'Rule Set Activation'),
+        ('MANUAL_FULL_EVALUATION', 'Manual Full Evaluation'),
+        ('GEOGRAPHY_RESOLUTION_UPDATE', 'Geography Resolution Update'),
+        ('ENTITY_REEVALUATION', 'Entity Re-evaluation'),
+        ('OVERRIDE_CHANGE', 'Override Change'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('RUNNING', 'Running'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('CANCELLED', 'Cancelled'),
+        ('SUPERSEDED', 'Superseded'),
+    ]
+
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='evaluation_runs')
+    rule_set = models.ForeignKey(ChapterRuleSet, on_delete=models.CASCADE, related_name='evaluation_runs')
+    run_mode = models.CharField(max_length=50, choices=MODE_CHOICES)
+    trigger_type = models.CharField(max_length=50, choices=TRIGGER_CHOICES)
+    geography_dataset_snapshot = models.JSONField()
+    resolver_version = models.CharField(max_length=50)
+    evaluation_engine_version = models.CharField(max_length=50)
+    membership_snapshot_date = models.DateField()
+    scope = models.CharField(max_length=255)
+    actor = models.CharField(max_length=150)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING')
+    entities_considered = models.IntegerField(default=0)
+    included_count = models.IntegerField(default=0)
+    excluded_count = models.IntegerField(default=0)
+    ambiguous_count = models.IntegerField(default=0)
+    unresolved_count = models.IntegerField(default=0)
+    overlap_count = models.IntegerField(default=0)
+    error_count = models.IntegerField(default=0)
+    started_time = models.DateTimeField(null=True, blank=True)
+    completed_time = models.DateTimeField(null=True, blank=True)
+    error_summary = models.TextField(blank=True, null=True)
+    retry_of = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='retries')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["chapter", "rule_set", "run_mode", "scope"],
+                condition=models.Q(status="PENDING"),
+                name="unique_pending_run_proposal"
+            )
+        ]
+
+    def __str__(self):
+        return f"Run {self.id} for {self.chapter.name} ({self.run_mode} - {self.status})"
+
+
+class ChapterEvaluationLocationSelection(models.Model):
+    STATUS_CHOICES = [
+        ('SELECTED', 'Selected'),
+        ('MULTIPLE_EQUIVALENT', 'Multiple Equivalent'),
+        ('AMBIGUOUS_LOCATION', 'Ambiguous Location'),
+        ('NO_CURRENT_LOCATION', 'No Current Location'),
+        ('NO_CURRENT_RESOLVED_LOCATION', 'No Current Resolved Location'),
+        ('INELIGIBLE_ENTITY_TYPE', 'Ineligible Entity Type'),
+        ('MANUALLY_SELECTED', 'Manually Selected'),
+    ]
+
+    METHOD_CHOICES = [
+        ('AUTOMATIC', 'Automatic'),
+        ('MANUAL', 'Manual'),
+    ]
+
+    evaluation_run = models.ForeignKey(ChapterEvaluationRun, on_delete=models.CASCADE, related_name='location_selections')
+    contributor_entity = models.ForeignKey(ContributorEntity, on_delete=models.CASCADE, related_name='chapter_location_selections')
+    selected_location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL)
+    selected_resolution = models.ForeignKey(LocationGeographyResolution, null=True, blank=True, on_delete=models.SET_NULL)
+    selection_status = models.CharField(max_length=50, choices=STATUS_CHOICES)
+    selection_method = models.CharField(max_length=50, choices=METHOD_CHOICES, default='AUTOMATIC')
+    explanation = models.TextField(blank=True)
+    manual_selection = models.BooleanField(default=False)
+    actor = models.CharField(max_length=150, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Location Selection for Entity {self.contributor_entity_id} in Run {self.evaluation_run_id} ({self.selection_status})"
+
+
+class ChapterEvaluationResult(models.Model):
+    RESULT_CHOICES = [
+        ('INCLUDED_BY_RULE', 'Included by Rule'),
+        ('EXCLUDED_BY_RULE', 'Excluded by Rule'),
+        ('MANUALLY_INCLUDED', 'Manually Included'),
+        ('MANUALLY_EXCLUDED', 'Manually Excluded'),
+        ('PROVISIONAL_GEOGRAPHIC_MATCH', 'Provisional Geographic Match'),
+        ('AMBIGUOUS_GEOGRAPHY', 'Ambiguous Geography'),
+        ('AMBIGUOUS_LOCATION', 'Ambiguous Location'),
+        ('NO_CURRENT_LOCATION', 'No Current Location'),
+        ('NO_CURRENT_RESOLVED_LOCATION', 'No Current Resolved Location'),
+        ('NO_RULE_MATCH', 'No Rule Match'),
+        ('INELIGIBLE_ENTITY_TYPE', 'Ineligible Entity Type'),
+        ('ERROR', 'Error'),
+    ]
+
+    CONFIDENCE_CHOICES = [
+        ('HIGH', 'High'),
+        ('MEDIUM', 'Medium'),
+        ('LOW', 'Low'),
+    ]
+
+    evaluation_run = models.ForeignKey(ChapterEvaluationRun, on_delete=models.CASCADE, related_name='results')
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='results')
+    rule_set = models.ForeignKey(ChapterRuleSet, on_delete=models.CASCADE, related_name='results')
+    contributor_entity = models.ForeignKey(ContributorEntity, on_delete=models.CASCADE, related_name='chapter_results')
+    location_selection = models.ForeignKey(ChapterEvaluationLocationSelection, on_delete=models.CASCADE, related_name='results')
+    selected_location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL)
+    selected_resolution = models.ForeignKey(LocationGeographyResolution, null=True, blank=True, on_delete=models.SET_NULL)
+    result_status = models.CharField(max_length=50, choices=RESULT_CHOICES)
+    confidence = models.CharField(max_length=50, choices=CONFIDENCE_CHOICES)
+    explanation = models.TextField(blank=True)
+    entity_type_snapshot = models.CharField(max_length=50)
+    entity_verification_snapshot = models.BooleanField()
+    membership_assessment = models.ForeignKey(MembershipAssessment, on_delete=models.PROTECT, related_name='chapter_results', null=True, blank=True)
+    membership_status_snapshot = models.CharField(max_length=50)
+    membership_rule_version_snapshot = models.CharField(max_length=50)
+    membership_assessment_date_snapshot = models.DateField(null=True, blank=True)
+    manual_override = models.ForeignKey(ChapterEntityOverride, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evaluation_run", "contributor_entity"],
+                name="unique_result_per_run_and_entity"
+            )
+        ]
+
+    def __str__(self):
+        return f"Result {self.id} for Entity {self.contributor_entity_id} in Run {self.evaluation_run_id} ({self.result_status})"
+
+
+class ChapterRuleMatch(models.Model):
+    OUTCOME_CHOICES = [
+        ('MATCHED_INCLUDE', 'Matched Include'),
+        ('MATCHED_EXCLUDE', 'Matched Exclude'),
+        ('NOT_MATCHED', 'Not Matched'),
+        ('NOT_EVALUATED', 'Not Evaluated'),
+        ('AMBIGUOUS', 'Ambiguous'),
+    ]
+
+    evaluation_result = models.ForeignKey(ChapterEvaluationResult, on_delete=models.CASCADE, related_name='rule_matches')
+    rule = models.ForeignKey(ChapterRule, on_delete=models.CASCADE, related_name='matches', null=True, blank=True)
+    match_outcome = models.CharField(max_length=50, choices=OUTCOME_CHOICES)
+    matched_county = models.ForeignKey(County, null=True, blank=True, on_delete=models.SET_NULL)
+    matched_place = models.ForeignKey(GeographicPlace, null=True, blank=True, on_delete=models.SET_NULL)
+    matched_postal_area = models.ForeignKey(PostalArea, null=True, blank=True, on_delete=models.SET_NULL)
+    location_resolution = models.ForeignKey(LocationGeographyResolution, null=True, blank=True, on_delete=models.SET_NULL)
+    explanation = models.TextField(blank=True)
+    confidence = models.CharField(max_length=50)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (models.Q(matched_county__isnull=True) & models.Q(matched_place__isnull=True) & models.Q(matched_postal_area__isnull=True)) |
+                    (models.Q(matched_county__isnull=False) & models.Q(matched_place__isnull=True) & models.Q(matched_postal_area__isnull=True)) |
+                    (models.Q(matched_county__isnull=True) & models.Q(matched_place__isnull=False) & models.Q(matched_postal_area__isnull=True)) |
+                    (models.Q(matched_county__isnull=True) & models.Q(matched_place__isnull=True) & models.Q(matched_postal_area__isnull=False))
+                ),
+                name="check_match_target_mutually_exclusive"
+            )
+        ]
+
+    def __str__(self):
+        return f"Match {self.id} for Result {self.evaluation_result_id} ({self.match_outcome})"
+
+
+class ChapterAssignment(models.Model):
+    STATUS_CHOICES = [
+        ('INCLUDED', 'Included'),
+        ('PROVISIONALLY_INCLUDED', 'Provisionally Included'),
+        ('EXCLUDED', 'Excluded'),
+        ('AMBIGUOUS', 'Ambiguous'),
+        ('UNRESOLVED', 'Unresolved'),
+        ('NO_MATCH', 'No Match'),
+        ('INELIGIBLE', 'Ineligible'),
+    ]
+
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='assignments')
+    evaluation_run = models.ForeignKey(ChapterEvaluationRun, on_delete=models.CASCADE, related_name='assignments')
+    contributor_entity = models.ForeignKey(ContributorEntity, on_delete=models.CASCADE, related_name='chapter_assignments')
+    evaluation_result = models.ForeignKey(ChapterEvaluationResult, on_delete=models.CASCADE, related_name='assignments')
+    assignment_status = models.CharField(max_length=50, choices=STATUS_CHOICES)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evaluation_run", "contributor_entity"],
+                name="unique_assignment_per_run_and_entity"
+            )
+        ]
+
+    def __str__(self):
+        return f"Assignment for Entity {self.contributor_entity_id} in Run {self.evaluation_run_id} ({self.assignment_status})"

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="{% url 'chapter_list' %}">Chapters</a></li>
+                <li><a href="{% url 'chapter_detail' assignment.chapter_id %}">{{ assignment.chapter.name }}</a></li>
+                <li class="is-active"><a href="#" aria-current="page">Assignment Details</a></li>
+            </ul>
+        </nav>
+
+        <h1 class="title is-2">Assignment Details</h1>
+        <p class="subtitle is-5 has-text-grey">
+            Assignment of contributor <strong>{{ assignment.contributor_entity.display_name }}</strong> to chapter <strong>{{ assignment.chapter.name }}</strong>.
+        </p>
+
+        <div class="columns">
+            <!-- Left: Assignment & Result Summary -->
+            <div class="column is-6">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Current Cache Assignment</h3>
+                    
+                    <table class="table is-fullwidth is-striped">
+                        <tbody>
+                            <tr>
+                                <td><strong>Assignment ID</strong></td>
+                                <td>{{ assignment.id }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Cached Status</strong></td>
+                                <td>
+                                    <span class="tag is-{% if assignment.assignment_status == 'INCLUDED' %}success{% elif assignment.assignment_status == 'PROVISIONALLY_INCLUDED' %}info{% elif assignment.assignment_status == 'EXCLUDED' %}danger{% else %}light{% endif %} is-medium">
+                                        {{ assignment.assignment_status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Result Outcome</strong></td>
+                                <td>
+                                    <span class="tag is-dark is-light">{{ result.result_status }}</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Confidence Level</strong></td>
+                                <td><span class="tag is-info is-light">{{ result.confidence }}</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Logic Explanation</strong></td>
+                                <td>{{ result.explanation }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Membership & Identity Snapshot</h3>
+                    
+                    <table class="table is-fullwidth is-striped">
+                        <tbody>
+                            <tr>
+                                <td><strong>Entity Type</strong></td>
+                                <td>{{ result.entity_type_snapshot }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Verification Status</strong></td>
+                                <td>
+                                    <span class="tag is-{% if result.entity_verification_snapshot %}success{% else %}warning{% endif %}">
+                                        {% if result.entity_verification_snapshot %}Verified{% else %}Unverified (Provisional){% endif %}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Membership Status</strong></td>
+                                <td>
+                                    <span class="tag tag-{{ result.membership_status_snapshot|lower }} is-light">
+                                        {{ result.membership_status_snapshot }}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Membership Rule Version</strong></td>
+                                <td>{{ result.membership_rule_version_snapshot }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Assessment Snapshot Date</strong></td>
+                                <td>{{ result.membership_assessment_date_snapshot|default:"None" }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right: Decisive Rule Matches Audit Log -->
+            <div class="column is-6">
+                <div class="box">
+                    <h3 class="title is-4 mb-4">Decisive Geographic Rule Matches</h3>
+                    <p class="subtitle is-6 has-text-grey">
+                        Only decisive rules that directly determined this assignment are stored.
+                    </p>
+                    
+                    {% for match in matches %}
+                        <div class="box has-background-white-bis mb-3">
+                            <div class="columns is-mobile mb-2">
+                                <div class="column">
+                                    <span class="tag is-{% if match.match_outcome == 'MATCHED_INCLUDE' %}success{% else %}danger{% endif %}">
+                                        {{ match.match_outcome }}
+                                    </span>
+                                </div>
+                                <div class="column is-narrow">
+                                    <span class="tag is-dark">Rule ID: {{ match.rule.id }}</span>
+                                </div>
+                            </div>
+                            
+                            <p class="mb-2"><strong>Target:</strong> 
+                                {% if match.rule.target_type == 'COUNTY' %}
+                                    County {{ match.matched_county.display_name }}
+                                {% elif match.rule.target_type == 'PLACE' %}
+                                    Place {{ match.matched_place.display_name }}
+                                {% elif match.rule.target_type == 'POSTAL_AREA' %}
+                                    Postal Area {{ match.matched_postal_area.postal_code }} ({{ match.matched_postal_area.postal_area_type }})
+                                {% endif %}
+                            </p>
+                            
+                            <p class="mb-2"><strong>Location Resolution:</strong> Loc {{ match.location_resolution.location_id }} (Method: {{ match.location_resolution.match_method }})</p>
+                            <p class="is-size-7 has-text-grey">{{ match.explanation }}</p>
+                        </div>
+                    {% empty %}
+                        <div class="notification is-warning is-light">
+                            No decisive rule matches logged for this result (e.g. override, ambiguity, or no rule match).
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
