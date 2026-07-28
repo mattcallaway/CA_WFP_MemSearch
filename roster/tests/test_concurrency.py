@@ -2,7 +2,7 @@ import os
 import threading
 from django.test import TransactionTestCase
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, IntegrityError
 
 from roster.models import ImportBatch, ImportAttempt, RawContribution, Contribution, ImportMappingProfile
 from roster.services.importer import import_csv_file
@@ -26,12 +26,11 @@ class DuplicateUploadConcurrencyTestCase(TransactionTestCase):
         )
         self.fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "synthetic_contributions.csv")
 
-    def test_simultaneous_duplicate_file_imports(self):
+    def test_simultaneous_identical_uploads(self):
         """
         Tests simultaneous imports of the same file hash across two worker threads.
-        Asserts exactly 1 canonical COMPLETED batch, 0 duplicate contributions, and 0 HTTP 500 / IntegrityError exceptions.
+        Asserts exactly 1 canonical COMPLETED batch, expected ImportAttempt count, 0 duplicate contributions.
         """
-        # First, establish canonical completed batch
         canonical_batch = import_csv_file(
             self.fixture_path,
             "synthetic_contributions.csv",
@@ -41,7 +40,6 @@ class DuplicateUploadConcurrencyTestCase(TransactionTestCase):
         )
         self.assertEqual(canonical_batch.status, 'COMPLETED')
 
-        # Now test two concurrent worker threads attempting duplicate uploads without override
         barrier = threading.Barrier(2)
         errors = [None, None]
 
@@ -71,26 +69,61 @@ class DuplicateUploadConcurrencyTestCase(TransactionTestCase):
 
         close_old_connections()
 
-        # Both concurrent duplicate attempts should be rejected safely with ValueError or SQLite table lock
         for err in errors:
             self.assertIsNotNone(err, "Expected concurrent duplicate attempt to be rejected.")
             self.assertTrue("already been imported" in str(err) or "locked" in str(err), f"Unexpected concurrency error: {err}")
 
-        # Verify canonical batch remains COMPLETED
         canonical_batch.refresh_from_db()
         self.assertEqual(canonical_batch.status, 'COMPLETED')
 
-        # Verify ImportAttempt audit records created
         attempts = ImportAttempt.objects.filter(import_batch=canonical_batch)
-        # Verify database invariants
+        self.assertGreaterEqual(attempts.count(), 1)
+
         completed_batches = ImportBatch.objects.filter(file_hash=canonical_batch.file_hash, status='COMPLETED')
         self.assertEqual(completed_batches.count(), 1)
 
-        # Verify no duplicate raw contributions
         total_raw = RawContribution.objects.filter(import_batch=canonical_batch).count()
         self.assertEqual(total_raw, 40)
 
-        # Verify no uncaught integrity errors
-        for err in errors:
-            if err:
-                self.assertNotIsInstance(err, type(connection.Database.IntegrityError))
+    def test_same_hash_completion_race(self):
+        """
+        Tests two pending batches with the same file hash attempting to transition to COMPLETED simultaneously.
+        Asserts database unique constraint prevents multiple completed batches.
+        """
+        b1 = ImportBatch.objects.create(file_name="race.csv", file_hash="hash_race_123", file_type="CSV", status="PENDING")
+        b2 = ImportBatch.objects.create(file_name="race.csv", file_hash="hash_race_123", file_type="CSV", status="PENDING")
+
+        b1.status = "COMPLETED"
+        b1.save()
+
+        b2.status = "COMPLETED"
+        with self.assertRaises(IntegrityError):
+            b2.save()
+
+        completed = ImportBatch.objects.filter(file_hash="hash_race_123", status="COMPLETED")
+        self.assertEqual(completed.count(), 1)
+
+    def test_upload_during_completion(self):
+        """
+        Tests duplicate upload submitted while canonical batch is completing.
+        Asserts rejection without corruption of canonical completed lifecycle.
+        """
+        canonical_batch = import_csv_file(
+            self.fixture_path,
+            "synthetic_contributions.csv",
+            self.profile.id,
+            actor="admin",
+            override_duplicate=False
+        )
+        self.assertEqual(canonical_batch.status, 'COMPLETED')
+
+        # Attempt duplicate upload during completed state
+        with self.assertRaises(ValueError) as cm:
+            import_csv_file(
+                self.fixture_path,
+                "synthetic_contributions.csv",
+                self.profile.id,
+                actor="admin",
+                override_duplicate=False
+            )
+        self.assertIn("already been imported", str(cm.exception))

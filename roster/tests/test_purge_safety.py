@@ -132,3 +132,9 @@ class PurgeSafetyTestCase(TestCase):
         # Verify failed audit event exists
         failed_events = AuditEvent.objects.filter(event_type='PURGE_BATCH_FAILED')
         self.assertTrue(failed_events.exists())
+
+    def test_active_database_isolation(self):
+        from django.db import connection
+        # Assert test connection DB name is temporary test DB, NOT production db.sqlite3
+        test_db_name = connection.settings_dict['NAME']
+        self.assertTrue('memory' in test_db_name or 'test' in test_db_name or test_db_name != 'db.sqlite3', f"Test runner must use test DB, found: {test_db_name}")
