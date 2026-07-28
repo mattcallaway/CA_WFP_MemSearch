@@ -51,7 +51,7 @@
                                         <strong>Active Ruleset:</strong><br>
                                         {% if item.active_ruleset %}
                                             <span class="tag is-success">v{{ item.active_ruleset.version }}</span>
-                                        {% else: %}
+                                        {% else %}
                                             <span class="tag is-danger">None</span>
                                         {% endif %}
                                     </div>
@@ -59,7 +59,7 @@
                                         <strong>Last Evaluation:</strong><br>
                                         {% if item.run %}
                                             <span class="is-size-7">{{ item.run.completed_time|date:"Y-m-d H:i" }}</span>
-                                        {% else: %}
+                                        {% else %}
                                             <span class="is-size-7 has-text-grey">Never</span>
                                         {% endif %}
                                     </div>
