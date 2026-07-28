@@ -36,9 +36,22 @@ def people_list(request):
     people = ContributorEntity.objects.filter(entity_type='INDIVIDUAL')
     
     if status_filter:
-        latest_assessments = MembershipAssessment.objects.order_by('contributor_entity', '-calculation_date').distinct('contributor_entity')
-        matching_entity_ids = [ass.contributor_entity_id for ass in latest_assessments if ass.calculated_status == status_filter]
-        people = people.filter(id__in=matching_entity_ids)
+        latest_ids = MembershipAssessment.objects.values('contributor_entity_id').annotate(max_id=Max('id')).values('max_id')
+        if status_filter == 'UNKNOWN':
+            assessed_entity_ids = MembershipAssessment.objects.values_list('contributor_entity_id', flat=True).distinct()
+            matching_entity_ids = list(MembershipAssessment.objects.filter(
+                id__in=latest_ids,
+                calculated_status='UNKNOWN'
+            ).values_list('contributor_entity_id', flat=True))
+            people = people.filter(
+                Q(id__in=matching_entity_ids) | ~Q(id__in=assessed_entity_ids)
+            )
+        else:
+            matching_entity_ids = list(MembershipAssessment.objects.filter(
+                id__in=latest_ids,
+                calculated_status=status_filter
+            ).values_list('contributor_entity_id', flat=True))
+            people = people.filter(id__in=matching_entity_ids)
         
     if query:
         people = people.filter(
