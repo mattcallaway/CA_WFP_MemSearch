@@ -475,6 +475,10 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                     matched_cluster.confidence_level = 'MEDIUM'
                     matched_cluster.confidence_explanation = "Grouped based on matching Name, ZIP, and corroborated employer/occupation/middle name."
                     clusters_to_update.append(matched_cluster)
+                elif matched_cluster.confidence_level == 'MEDIUM':
+                    matched_cluster.confidence_level = 'HIGH'
+                    matched_cluster.confidence_explanation = "Highly corroborated donor profile with multiple matching transactions."
+                    clusters_to_update.append(matched_cluster)
                 cluster = matched_cluster
             else:
                 entity = ContributorEntity(

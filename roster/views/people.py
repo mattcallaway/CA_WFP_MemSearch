@@ -101,6 +101,8 @@ def people_list(request):
     }
     return render(request, 'people/list.html', context)
 
+from decimal import Decimal
+
 @login_required
 @permission_required('roster.view_sensitive_roster', raise_exception=True)
 def person_profile(request, entity_id):
@@ -117,8 +119,8 @@ def person_profile(request, entity_id):
         count=Count('id')
     )
     
-    positives = active_contribs.filter(amount__gt=0).aggregate(total=Sum('amount'))['total'] or 0.00
-    negatives = active_contribs.filter(amount__lt=0).aggregate(total=Sum('amount'))['total'] or 0.00
+    positives = active_contribs.filter(amount__gt=0).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    negatives = active_contribs.filter(amount__lt=0).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     net_total = positives + negatives
     
     timeline = []

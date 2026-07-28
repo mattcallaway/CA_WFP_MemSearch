@@ -384,10 +384,15 @@ def resolve_and_cluster_contribution(contribution, actor="SYSTEM"):
         )
         
         # Update confidence if corroborated
-        if corroborated and matched_cluster.confidence_level == 'LOW':
-            matched_cluster.confidence_level = 'MEDIUM'
-            matched_cluster.confidence_explanation = "Grouped based on matching Name, ZIP, and corroborated employer/occupation/middle name."
-            matched_cluster.save()
+        if corroborated:
+            if matched_cluster.confidence_level == 'LOW':
+                matched_cluster.confidence_level = 'MEDIUM'
+                matched_cluster.confidence_explanation = "Grouped based on matching Name, ZIP, and corroborated employer/occupation/middle name."
+                matched_cluster.save()
+            elif matched_cluster.confidence_level == 'MEDIUM':
+                matched_cluster.confidence_level = 'HIGH'
+                matched_cluster.confidence_explanation = "Highly corroborated donor profile with multiple matching transactions."
+                matched_cluster.save()
             
         ContributionClusterAssignment.objects.create(
             contribution=contribution,
