@@ -11,7 +11,7 @@ from roster.services.membership import evaluate_cluster_recurrence, evaluate_mem
 
 class MembershipTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="testadmin", password="password")
+        self.user = User.objects.create_superuser(username="testadmin", password="password")
         self.batch = ImportBatch.objects.create(
             file_name="test.csv",
             file_hash="hash123",
@@ -229,3 +229,61 @@ class MembershipTestCase(TestCase):
         self.assertEqual(assessment.membership_authority, 'PROVISIONAL')
         self.assertEqual(assessment.recurrence_pattern_status, 'RECURRING_PATTERN')
         self.assertFalse(assessment.identity_verified_at_assessment)
+
+    def test_check_is_verified_sync_constraint_fails_on_inconsistent_update(self):
+        from django.db import IntegrityError
+        entity = ContributorEntity.objects.create(
+            display_name="CONSTRAINT_TEST",
+            entity_type="INDIVIDUAL",
+            verification_status="UNVERIFIED",
+            is_verified=False
+        )
+        with self.assertRaises(IntegrityError):
+            ContributorEntity.objects.filter(id=entity.id).update(
+                is_verified=True,
+                verification_status="UNVERIFIED"
+            )
+
+    def test_centralized_identity_services_and_method_validations(self):
+        from roster.services.identity import verify_contributor_identity, unverify_contributor_identity
+        from roster.models import AuditEvent
+        from django.core.exceptions import ValidationError, PermissionDenied
+
+        entity = ContributorEntity.objects.create(
+            display_name="SERVICE_TEST",
+            entity_type="INDIVIDUAL",
+            verification_status="UNVERIFIED",
+            is_verified=False
+        )
+
+        # ADMIN_REVIEW requires explanation
+        with self.assertRaises(ValidationError):
+            verify_contributor_identity(
+                entity=entity,
+                method="ADMIN_REVIEW",
+                actor="testadmin",
+                explanation=""
+            )
+
+        # ADMIN_REVIEW success
+        verify_contributor_identity(
+            entity=entity,
+            method="ADMIN_REVIEW",
+            actor="testadmin",
+            explanation="Validated via public record"
+        )
+        entity.refresh_from_db()
+        self.assertTrue(entity.is_verified)
+        self.assertEqual(entity.verification_status, "VERIFIED")
+        self.assertEqual(entity.verification_method, "ADMIN_REVIEW")
+
+        # Unverify entity
+        unverify_contributor_identity(
+            entity=entity,
+            actor="testadmin",
+            reason="Unverified for testing"
+        )
+        entity.refresh_from_db()
+        self.assertFalse(entity.is_verified)
+        self.assertEqual(entity.verification_status, "UNVERIFIED")
+        self.assertEqual(entity.verification_method, "NONE")

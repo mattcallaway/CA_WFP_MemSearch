@@ -122,6 +122,13 @@ class ContributorEntity(models.Model):
                 check=~models.Q(verification_method='ADMIN_REVIEW') | models.Q(verified_by__isnull=False),
                 name='check_admin_verified_has_actor'
             ),
+            models.CheckConstraint(
+                check=(
+                    (models.Q(is_verified=True) & models.Q(verification_status='VERIFIED')) |
+                    (models.Q(is_verified=False) & models.Q(verification_status='UNVERIFIED'))
+                ),
+                name='check_is_verified_sync'
+            ),
         ]
         permissions = [
             ("view_sensitive_roster", "Can view sensitive roster information"),

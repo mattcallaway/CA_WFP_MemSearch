@@ -38,14 +38,18 @@ This is a secure, transaction-first, private web application designed to turn Ca
 
 ---
 
-## Stage 2B.1 Identity and Import Integrity Repair
+## Stage 2B.1 Identity & Import Integrity Repair (Final Closeout)
 
-- **Decoupled Identity Verification**: Transaction recurrence and cluster confidence describe cluster cohesion and payment frequency. They NEVER automatically verify entity identity or promote unverified donors to authoritative active membership.
-- **Explicit Verification Provenance**: Adds `verification_status` (`UNVERIFIED`, `VERIFIED`), `verification_method` (`NONE`, `ADMIN_REVIEW`, `EXTERNAL_IDENTITY_MATCH`, `LEGACY_REVIEWED`), `verified_at`, `verified_by`, and `verification_evidence` fields with database check constraints.
-- **Provisional Recurrence Pattern Authority**: Unverified recurring donors receive `PROVISIONAL` membership status with `membership_authority = 'PROVISIONAL'` and `recurrence_pattern_status = 'RECURRING_PATTERN'`, preventing false claims of authoritative membership.
-- **1-to-1 Current Assessment Uniqueness**: `MembershipAssessment` enforces `unique_current_assessment_per_entity` DB constraint (`is_current=True`). Superseded historical assessments are retained with `is_current=False`.
-- **Reversible Repair Command**: `python manage.py repair_recurrence_identity_drift --dry-run` identifies and repairs entities auto-verified solely through cluster-confidence escalation.
-- **Canonical ImportBatch Constraint**: Restored `unique_completed_batch_file_hash` database constraint on `ImportBatch`. Duplicate file uploads create `ImportAttempt` audit records without altering `COMPLETED` batch lifecycles.
+- **Single Source of Verification Truth**: Database `CheckConstraint` `check_is_verified_sync` on `ContributorEntity` requiring `is_verified=True` <-> `verification_status='VERIFIED'` and `is_verified=False` <-> `verification_status='UNVERIFIED'`.
+- **Centralized Verification Services (`roster/services/identity.py`)**: `verify_contributor_identity`, `unverify_contributor_identity`, and `bulk_unverify_identity_drift` provide strict actor validation, `manage_identity` permission checks, method-specific evidence/explanation validations, atomic transactions, and non-PII audit logging.
+- **Method-Specific Validations**: `ADMIN_REVIEW` requires explanation + actor; `EXTERNAL_IDENTITY_MATCH` requires structured evidence reference + explanation (NO raw source PII in evidence); `LEGACY_REVIEWED` requires legacy basis explanation.
+- **Immutable Unique-Directory Manifests**: Executed repair manifests stored under `artifacts/audit/identity_repair/<uuid>/` containing `correction_manifest.json`, `rollback_manifest.json`, and `run_summary.json` with SHA-256 hashes. Reconstructed manifest generated for original 471-entity repair.
+- **Authorized Rollback Command**: `python manage.py rollback_identity_drift_repair --manifest <path> --actor <username> --dry-run` supports SHA-256 verified rollback and reapplication.
+- **File-Backed Multi-Thread Concurrency Testing**: `DuplicateUploadConcurrencyTestCase` verifies simultaneous duplicate file uploads and batch transitions cause 0 HTTP 500 / `IntegrityError` exceptions.
+- **Query-Count Bounded Import Benchmarks**: `ImportBenchmarkTestCase` proves import query counts scale with chunk size (under 50 queries for 100 rows, under 120 queries for 1,000 rows).
+- **Chapter Propagation & Staleness**: `ChapterPropagationTestCase` verifies identity unverification triggers `ENTITY_REEVALUATION` staleness and replacement generation without modifying historical chapter evaluation runs.
+- **Provenance-Based Fixture Audit & Cleanup Commands**: `audit_synthetic_fixtures` and manifest-driven `cleanup_synthetic_fixtures` allow authorized, dry-run previewed cleanup of benchmark entities.
+- **Retrieval-Level Privacy Sentinels**: Privacy sentinel suite asserts HTTP 403 for unauthorized requests lacking `view_sensitive_roster` and verifies `.values()` projections for aggregate routes.
 
 ---
 
@@ -58,21 +62,21 @@ WFP MemSearch/
 │   └── urls.py
 ├── roster/                 # Main Application
 │   ├── static/
-│   │   └── vendor/         # Vendored local CSS & JS
-│   │       ├── css/
-│   │       │   └── bulma.min.css
-│   │       └── js/
-│   │           └── htmx.min.js
 │   ├── templates/          # HTML templates
 │   ├── services/           # Decoupled business logic
 │   │   ├── importer.py     # Ingestion & rollbacks
 │   │   ├── resolver.py     # Clustering & parsing
 │   │   ├── membership.py   # Pattern & membership
+│   │   ├── identity.py     # Centralized identity verification
 │   │   └── chapter_engine.py # Chapter assignment engine
 │   ├── management/
 │   │   └── commands/       # CLI commands
-│   │       └── repair_recurrence_identity_drift.py
-│   ├── tests/              # Automated unit tests
+│   │       ├── repair_recurrence_identity_drift.py
+│   │       ├── reconstruct_executed_repair_manifest.py
+│   │       ├── rollback_identity_drift_repair.py
+│   │       ├── audit_synthetic_fixtures.py
+│   │       └── cleanup_synthetic_fixtures.py
+│   ├── tests/              # Automated unit test suite (82 tests)
 │   └── models.py           # Django model definitions
 ├── manage.py
 ├── requirements.txt
@@ -83,50 +87,36 @@ WFP MemSearch/
 
 ## Setup & Running Locally
 
-### 1. Initialize Virtual Environment & Install Requirements
 ```bash
-# Create venv
+# Create and activate virtual environment
 python -m venv venv
-
-# Activate venv (Windows PowerShell)
 .\venv\Scripts\Activate.ps1
 
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Apply Migrations & Initialize Schema
-```bash
+# Apply migrations
 python manage.py migrate
-```
 
-### 3. Create Admin Superuser
-To log into the roster dashboard, create an administrative account:
-```bash
+# Create admin user & setup roles
+python manage.py setup_roles
 python manage.py createsuperuser
-```
 
-### 4. Run Development Server
-```bash
+# Run server
 python manage.py runserver
 ```
-Navigate to [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your web browser.
 
 ---
 
-## Running Automated Tests
+## Running Automated Tests & Management Commands
 
-To run the complete test suite:
 ```bash
+# Run full unit test suite (82 tests)
 python manage.py test
-```
 
----
+# Identity Repair Commands
+python manage.py repair_recurrence_identity_drift --dry-run --actor admin
+python manage.py reconstruct_executed_repair_manifest
+python manage.py rollback_identity_drift_repair --manifest artifacts/audit/identity_repair/reconstructed_04be683e-5749-8c93-a6b1-dbf1a4a8b02f --actor admin --dry-run
 
-## Identity Drift Repair Command
-
-To preview or run the identity drift repair:
-```bash
-python manage.py repair_recurrence_identity_drift --dry-run --actor <username>
-python manage.py repair_recurrence_identity_drift --confirm --actor <username>
+# Synthetic Fixture Audit & Cleanup Commands
+python manage.py audit_synthetic_fixtures
+python manage.py cleanup_synthetic_fixtures --manifest artifacts/audit/synthetic_cleanup_manifest.json --actor admin --dry-run
 ```
