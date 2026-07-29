@@ -47,6 +47,16 @@ from roster.services.membership_calculator import (
 )
 
 
+def _normalize_nullable(val):
+    """Normalize null-equivalent values to None.
+
+    Treats None, "", and "None" as equivalent non-applicable values.
+    """
+    if val is None or val == "" or val == "None":
+        return None
+    return val
+
+
 def _get_git_revision():
     try:
         result = subprocess.run(
@@ -315,8 +325,8 @@ class Command(BaseCommand):
             stored_amt = Decimal(current_a.recurring_amount or 0).quantize(Decimal("0.01"))
             computed_amt = Decimal(calc_state.recurring_amount or 0).quantize(Decimal("0.01"))
             amt_diff = stored_amt != computed_amt
-            pi_diff = (current_a.payment_interval or "") != (
-                calc_state.payment_interval or ""
+            pi_diff = _normalize_nullable(current_a.payment_interval) != _normalize_nullable(
+                calc_state.payment_interval
             )
             rv_diff = (current_a.rule_version_id or 0) != (
                 calc_state.rule_version_id or 0
@@ -367,7 +377,7 @@ class Command(BaseCommand):
                         "recurrence_pattern_status": current_a.recurrence_pattern_status,
                         "membership_authority": current_a.membership_authority,
                         "recurring_amount": format(stored_amt, ".2f"),
-                        "payment_interval": current_a.payment_interval or "None",
+                        "payment_interval": _normalize_nullable(current_a.payment_interval),
                         "rule_version_id": current_a.rule_version_id,
                     },
                     "after": {
@@ -375,7 +385,7 @@ class Command(BaseCommand):
                         "recurrence_pattern_status": calc_state.recurrence_pattern_status,
                         "membership_authority": calc_state.membership_authority,
                         "recurring_amount": format(computed_amt, ".2f"),
-                        "payment_interval": calc_state.payment_interval or "None",
+                        "payment_interval": _normalize_nullable(calc_state.payment_interval),
                         "rule_version_id": calc_state.rule_version_id,
                     },
                     "matrix_state_before": before_state_id,

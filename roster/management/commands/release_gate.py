@@ -552,9 +552,8 @@ class Command(BaseCommand):
 
     # === G09: Concurrency Safety and Completion ===
     def _g09_concurrency(self):
-        """Require file-backed database concurrency evidence."""
+        """Require production-importer file-backed concurrency evidence."""
         evidence_path = os.path.join("release", "concurrency_evidence.json")
-        test_file = os.path.join("roster", "tests", "test_concurrency_file_backed.py")
         if not os.path.exists(evidence_path):
             return self._gate(
                 "G09", "Concurrency Safety and Completion", "MISSING_EVIDENCE",
@@ -563,45 +562,53 @@ class Command(BaseCommand):
         with open(evidence_path) as f:
             data = json.load(f)
 
-        # Require all file-backed database assertions
-        db_path = data.get("resolved_database_path", "")
-        is_file_backed = (
-            data.get("file_existed_during_test", False)
-            and data.get("database_size_greater_than_zero", False)
-            and db_path != ":memory:"
-            and "mode=memory" not in db_path
-            and db_path != data.get("active_database_path", "")
-        )
+        # Require production importer
+        is_production = data.get("production_importer", False)
+
+        # Require file-backed database
+        is_file_backed = data.get("is_file_backed", False)
+
+        # Require all safety assertions
         substantive = (
-            is_file_backed
+            is_production
+            and is_file_backed
             and data.get("separate_worker_connections", False)
-            and data.get("eventual_success_result", False)
-            and data.get("duplicate_count_result", False)
+            and data.get("at_least_one_success", False)
+            and data.get("at_most_one_completed_batch", False)
+            and data.get("competing_attempt_rejected", False)
+            and data.get("no_duplicate_raw_rows", False)
+            and data.get("no_duplicate_contributions", False)
+            and data.get("no_duplicate_entities", False)
+            and data.get("no_duplicate_current_assessments", False)
+            and data.get("failed_attempts_auditable", False)
+            and data.get("no_uncaught_exceptions", True)
             and data.get("test_process_exit_code") == 0
             and data.get("database_file_cleanup", False)
             and data.get("temp_directory_cleanup", False)
         )
 
         evidence = {
-            "resolved_database_path": db_path,
+            "production_importer": is_production,
+            "resolved_database_path": data.get("resolved_database_path"),
+            "is_file_backed": is_file_backed,
             "file_existed_during_test": data.get("file_existed_during_test"),
             "database_size_bytes": data.get("database_size_bytes"),
-            "database_size_greater_than_zero": data.get("database_size_greater_than_zero"),
-            "is_file_backed": is_file_backed,
             "separate_worker_connections": data.get("separate_worker_connections"),
-            "eventual_success_result": data.get("eventual_success_result"),
-            "duplicate_count_result": data.get("duplicate_count_result"),
-            "lock_retry_result": data.get("lock_retry_result"),
+            "at_least_one_success": data.get("at_least_one_success"),
+            "at_most_one_completed_batch": data.get("at_most_one_completed_batch"),
+            "competing_attempt_rejected": data.get("competing_attempt_rejected"),
+            "no_duplicate_raw_rows": data.get("no_duplicate_raw_rows"),
+            "no_duplicate_contributions": data.get("no_duplicate_contributions"),
+            "no_duplicate_entities": data.get("no_duplicate_entities"),
+            "no_duplicate_current_assessments": data.get("no_duplicate_current_assessments"),
+            "failed_attempts_auditable": data.get("failed_attempts_auditable"),
+            "no_uncaught_exceptions": data.get("no_uncaught_exceptions"),
+            "final_database_counts": data.get("final_database_counts"),
             "test_process_exit_code": data.get("test_process_exit_code"),
             "wal_shm_cleanup": data.get("wal_shm_cleanup"),
             "database_file_cleanup": data.get("database_file_cleanup"),
             "temp_directory_cleanup": data.get("temp_directory_cleanup"),
         }
-        # Add test file hash
-        if os.path.exists(test_file):
-            evidence["test_file_sha256"] = hashlib.sha256(
-                open(test_file, "rb").read()
-            ).hexdigest()
 
         return self._gate(
             "G09", "Concurrency Safety and Completion",

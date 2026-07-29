@@ -184,32 +184,26 @@ class Command(BaseCommand):
         return 'fixed'
 
     def _calculate_coefficients(self, res_100, res_1000):
-        # We can extract average Q per chunk directly from the phase profiles
         p100 = res_100['phase_profile']
         p1000 = res_1000['phase_profile']
         
-        # Calculate chunks
-        c_imp_100 = math.ceil(100 / 500)
-        c_ent_100 = math.ceil(res_100['output']['entities_created'] / 500)
         c_imp_1000 = math.ceil(1000 / 500)
         c_ent_1000 = math.ceil(res_1000['output']['entities_created'] / 500)
         
-        q_imp_100 = p100.get('import_chunk', 0)
-        q_imp_1000 = p1000.get('import_chunk', 0)
-        avg_q_imp = round(((q_imp_100 / max(1, c_imp_100)) + (q_imp_1000 / max(1, c_imp_1000))) / 2)
+        # Use 100-row run to establish fixed query count
+        fixed_setup = p100.get('fixed', 4)
+        fixed_finalization = p100.get('finalization', 4)
         
-        q_ent_100 = p100.get('entity_chunk', 0)
-        q_ent_1000 = p1000.get('entity_chunk', 0)
-        avg_q_ent = round(((q_ent_100 / max(1, c_ent_100)) + (q_ent_1000 / max(1, c_ent_1000))) / 2)
-        
-        avg_fixed = round((p100.get('fixed', 0) + p1000.get('fixed', 0)) / 2)
-        avg_fin = round((p100.get('finalization', 0) + p1000.get('finalization', 0)) / 2)
+        # Use 1000-row run to refine per-chunk coefficients
+        q_imp = round(p1000.get('import_chunk', 0) / max(1, c_imp_1000))
+        q_ent = round(p1000.get('entity_chunk', 0) / max(1, c_ent_1000))
         
         return {
-            'fixed': avg_fixed,
-            'Q_import_chunk': avg_q_imp,
-            'Q_entity_chunk': avg_q_ent,
-            'finalization': avg_fin
+            'fixed_setup_queries': fixed_setup,
+            'queries_per_import_chunk': q_imp,
+            'queries_per_entity_chunk': q_ent,
+            'fixed_finalization_queries': fixed_finalization,
+            'fixed_bounded_margin': 15
         }
 
     def _run_benchmark(self, num_rows, chunk_size, coefficients):
@@ -313,16 +307,29 @@ class Command(BaseCommand):
 
             if coefficients:
                 calculated_ceiling = (
-                    coefficients['fixed'] +
-                    n_chunks_import * coefficients['Q_import_chunk'] +
-                    n_chunks_membership * coefficients['Q_entity_chunk'] +
-                    coefficients['finalization']
+                    coefficients['fixed_setup_queries'] +
+                    n_chunks_import * coefficients['queries_per_import_chunk'] +
+                    n_chunks_membership * coefficients['queries_per_entity_chunk'] +
+                    coefficients['fixed_finalization_queries']
                 )
+                fixed_bounded_margin = coefficients['fixed_bounded_margin']
+                
+                fixed_setup_queries = coefficients['fixed_setup_queries']
+                queries_per_import_chunk = coefficients['queries_per_import_chunk']
+                queries_per_entity_chunk = coefficients['queries_per_entity_chunk']
+                fixed_finalization_queries = coefficients['fixed_finalization_queries']
             else:
                 # Bootstrap ceiling from observed phase profile
                 calculated_ceiling = sum(phase_profile.values())
-            bounded_margin = max(14, int(total_queries * 0.35))
-            formula_ceiling = calculated_ceiling + bounded_margin
+                fixed_bounded_margin = 15
+                
+                fixed_setup_queries = phase_profile.get('fixed', 0)
+                queries_per_import_chunk = round(phase_profile.get('import_chunk', 0) / max(1, n_chunks_import))
+                queries_per_entity_chunk = round(phase_profile.get('entity_chunk', 0) / max(1, n_chunks_membership))
+                fixed_finalization_queries = phase_profile.get('finalization', 0)
+
+            formula_ceiling = calculated_ceiling + fixed_bounded_margin
+            is_holdout = (num_rows == 10000)
 
             queries_per_row = total_queries / max(num_rows, 1)
 
@@ -340,17 +347,19 @@ class Command(BaseCommand):
                 "ceiling_details": {
                     "rows": num_rows,
                     "entities": entities_created,
+                    "chunk_size": chunk_size,
                     "import_chunks": n_chunks_import,
                     "entity_chunks": n_chunks_membership,
-                    "fixed_queries": phase_profile['fixed'],
-                    "import_chunk_queries": phase_profile['import_chunk'],
-                    "entity_chunk_queries": phase_profile['entity_chunk'],
-                    "finalization_queries": phase_profile['finalization'],
+                    "fixed_setup_queries": fixed_setup_queries,
+                    "queries_per_import_chunk": queries_per_import_chunk,
+                    "queries_per_entity_chunk": queries_per_entity_chunk,
+                    "fixed_finalization_queries": fixed_finalization_queries,
                     "calculated_ceiling": calculated_ceiling,
-                    "bounded_margin": bounded_margin,
+                    "fixed_bounded_margin": fixed_bounded_margin,
                     "final_ceiling": formula_ceiling,
                     "actual_queries": total_queries,
                     "within_ceiling": total_queries <= formula_ceiling,
+                    "is_holdout": is_holdout,
                 },
                 "input": composition,
                 "output": {

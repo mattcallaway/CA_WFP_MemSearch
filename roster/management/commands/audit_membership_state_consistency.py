@@ -32,6 +32,16 @@ from roster.services.membership_calculator import (
 )
 
 
+def _normalize_nullable(val):
+    """Normalize null-equivalent values to None.
+
+    Treats None, "", and "None" as equivalent non-applicable values.
+    """
+    if val is None or val == "" or val == "None":
+        return None
+    return val
+
+
 class Command(BaseCommand):
     help = "Audit membership state consistency with dual recomputation."
 
@@ -312,12 +322,12 @@ class Command(BaseCommand):
                         "stored": format(stored_amt, ".2f"),
                         "computed": format(computed_amt, ".2f"),
                     }
-                if (stored_a.payment_interval or "") != (
-                    computed.payment_interval or ""
-                ):
+                stored_pi = _normalize_nullable(stored_a.payment_interval)
+                computed_pi = _normalize_nullable(computed.payment_interval)
+                if stored_pi != computed_pi:
                     diffs["payment_interval"] = {
-                        "stored": stored_a.payment_interval or "",
-                        "computed": computed.payment_interval or "",
+                        "stored": stored_pi,
+                        "computed": computed_pi,
                     }
                 stored_rv = (
                     stored_a.rule_version_id if stored_a.rule_version_id else None
@@ -389,7 +399,7 @@ class Command(BaseCommand):
                     "recurrence_pattern_status": a.recurrence_pattern_status,
                     "membership_authority": a.membership_authority,
                     "recurring_amount": _fmt_amt(a.recurring_amount),
-                    "payment_interval": a.payment_interval or "None",
+                    "payment_interval": _normalize_nullable(a.payment_interval),
                     "rule_version_id": a.rule_version_id,
                     "evaluation_date": str(a.calculation_date.date() if a.calculation_date else repair_eval_date),
                 },
@@ -403,7 +413,7 @@ class Command(BaseCommand):
                     "recurrence_pattern_status": repair_state.recurrence_pattern_status,
                     "membership_authority": repair_state.membership_authority,
                     "recurring_amount": _fmt_amt(repair_state.recurring_amount),
-                    "payment_interval": repair_state.payment_interval or "None",
+                    "payment_interval": _normalize_nullable(repair_state.payment_interval),
                     "rule_version_id": repair_state.rule_version_id,
                     "evaluation_date": str(repair_eval_date),
                 }
