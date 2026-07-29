@@ -4,8 +4,9 @@
   "matrix_content_sha256": "ff84bb1ff4dde138d7159b5cc4d046e4fa561f21b2a87aabde515c55e410a25b",
   "matrix_file_sha256": "31bb060d884894aed71a7a800087be9e1a58f5ec42e5cccc1bfed67064b2dfed",
   "canonicalization_version": "json-sorted-compact-v1",
-  "matrix_file_path": "roster/fixtures/allowed_state_matrix.json",
-  "approval_status": "DRAFT",
-  "approved_by": null,
-  "approved_at": null
+  "matrix_source_git_revision": "658c068325521d78d8f35a0e352ef176da99f665",
+  "approval_status": "APPROVED",
+  "approved_by": "mattcallaway",
+  "approved_at": "2026-07-29T18:45:26Z",
+  "approval_rationale": "Approved after canonical-digest verification, complete positive-state coverage, direct rejected-state vectors, explicit membership predicates, and correction of nonrecurring S08 amount and interval semantics."
 }
