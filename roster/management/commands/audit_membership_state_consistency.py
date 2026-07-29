@@ -134,6 +134,43 @@ class Command(BaseCommand):
             },
         }
 
+        def _match_stored_matrix_state(entity, assessment):
+            for state in allowed_states:
+                et = state.get("entity_type")
+                et_match = (
+                    (entity.entity_type in et)
+                    if isinstance(et, list)
+                    else (entity.entity_type == et or et == "ANY")
+                )
+                vs = state.get("verification_status", "ANY")
+                vs_match = entity.verification_status == vs or vs == "ANY"
+                cs_match = assessment.calculated_status == state["calculated_status"]
+                rps_match = assessment.recurrence_pattern_status == state["recurrence_pattern_status"]
+                ma_match = assessment.membership_authority == state["membership_authority"]
+                if et_match and vs_match and cs_match and rps_match and ma_match:
+                    return _state_id(state)
+            return "UNMATCHED"
+
+        def _match_computed_matrix_state(entity, computed_state):
+            for state in allowed_states:
+                et = state.get("entity_type")
+                et_match = (
+                    (entity.entity_type in et)
+                    if isinstance(et, list)
+                    else (entity.entity_type == et or et == "ANY")
+                )
+                vs = state.get("verification_status", "ANY")
+                vs_match = entity.verification_status == vs or vs == "ANY"
+                cs_match = computed_state.calculated_status == state["calculated_status"]
+                rps_match = computed_state.recurrence_pattern_status == state["recurrence_pattern_status"]
+                ma_match = computed_state.membership_authority == state["membership_authority"]
+                if et_match and vs_match and cs_match and rps_match and ma_match:
+                    return _state_id(state)
+            return "UNMATCHED"
+
+        def _fmt_amt(val):
+            return format(Decimal(val or 0).quantize(Decimal("0.01")), ".2f")
+
         for a in assessments:
             summary["total_assessments"] += 1
             entity = entities.get(a.contributor_entity_id)
@@ -268,12 +305,12 @@ class Command(BaseCommand):
                         "stored": stored_a.membership_authority,
                         "computed": computed.membership_authority,
                     }
-                stored_amt = float(stored_a.recurring_amount or 0)
-                computed_amt = float(computed.recurring_amount or 0)
-                if abs(stored_amt - computed_amt) > 0.01:
+                stored_amt = Decimal(stored_a.recurring_amount or 0).quantize(Decimal("0.01"))
+                computed_amt = Decimal(computed.recurring_amount or 0).quantize(Decimal("0.01"))
+                if stored_amt != computed_amt:
                     diffs["recurring_amount"] = {
-                        "stored": stored_amt,
-                        "computed": computed_amt,
+                        "stored": format(stored_amt, ".2f"),
+                        "computed": format(computed_amt, ".2f"),
                     }
                 if (stored_a.payment_interval or "") != (
                     computed.payment_interval or ""
@@ -325,6 +362,13 @@ class Command(BaseCommand):
             if repair_match and tuple_match and evidence_match:
                 summary["fully_matching"] += 1
 
+            # Stored matrix state
+            stored_matrix_state_id = matched_state_id or "UNMATCHED"
+            # Repair matrix state
+            repair_matrix_state_id = "UNMATCHED"
+            if repair_state:
+                repair_matrix_state_id = _match_computed_matrix_state(entity, repair_state)
+
             record = {
                 "entity_id": entity.id,
                 "assessment_id": a.id,
@@ -332,21 +376,37 @@ class Command(BaseCommand):
                 "verification_status": entity.verification_status,
                 "matrix_tuple_match": tuple_match,
                 "matched_state_id": matched_state_id,
+                "stored_matrix_state_id": stored_matrix_state_id,
+                "repair_matrix_state_id": repair_matrix_state_id,
                 "evidence_condition_match": evidence_match,
                 "historical_parity_match": hist_match,
                 "current_repair_match": repair_match,
                 "stored_calculated_status": a.calculated_status,
                 "stored_recurrence_pattern_status": a.recurrence_pattern_status,
                 "stored_membership_authority": a.membership_authority,
+                "stored_state": {
+                    "calculated_status": a.calculated_status,
+                    "recurrence_pattern_status": a.recurrence_pattern_status,
+                    "membership_authority": a.membership_authority,
+                    "recurring_amount": _fmt_amt(a.recurring_amount),
+                    "payment_interval": a.payment_interval or "None",
+                    "rule_version_id": a.rule_version_id,
+                    "evaluation_date": str(a.calculation_date.date() if a.calculation_date else repair_eval_date),
+                },
             }
             if repair_state:
                 record["repair_calculated_status"] = repair_state.calculated_status
-                record["repair_recurrence_pattern_status"] = (
-                    repair_state.recurrence_pattern_status
-                )
-                record["repair_membership_authority"] = (
-                    repair_state.membership_authority
-                )
+                record["repair_recurrence_pattern_status"] = repair_state.recurrence_pattern_status
+                record["repair_membership_authority"] = repair_state.membership_authority
+                record["repair_state"] = {
+                    "calculated_status": repair_state.calculated_status,
+                    "recurrence_pattern_status": repair_state.recurrence_pattern_status,
+                    "membership_authority": repair_state.membership_authority,
+                    "recurring_amount": _fmt_amt(repair_state.recurring_amount),
+                    "payment_interval": repair_state.payment_interval or "None",
+                    "rule_version_id": repair_state.rule_version_id,
+                    "evaluation_date": str(repair_eval_date),
+                }
 
             if not repair_match and isinstance(repair_diffs, dict):
                 record["repair_field_diffs"] = repair_diffs

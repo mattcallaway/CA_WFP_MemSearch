@@ -90,6 +90,7 @@ def _get_matrix_digest():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
     matrix_path = os.path.join(base_dir, "fixtures", "allowed_state_matrix.json")
+    approval_path = os.path.join(base_dir, "fixtures", "state_matrix_approval.json")
     if not os.path.exists(matrix_path):
         return None, None
     with open(matrix_path) as f:
@@ -104,7 +105,13 @@ def _get_matrix_digest():
         canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     )
     digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
-    return digest, data.get("status", "UNKNOWN")
+    # Read approval status from approval artifact
+    matrix_status = data.get("status", "UNKNOWN")
+    if os.path.exists(approval_path):
+        with open(approval_path) as f:
+            approval = json.load(f)
+        matrix_status = approval.get("approval_status", matrix_status)
+    return digest, matrix_status
 
 
 class Command(BaseCommand):
@@ -305,10 +312,9 @@ class Command(BaseCommand):
             ma_diff = (
                 current_a.membership_authority != calc_state.membership_authority
             )
-            amt_diff = abs(
-                float(current_a.recurring_amount or 0)
-                - float(calc_state.recurring_amount or 0)
-            ) > 0.01
+            stored_amt = Decimal(current_a.recurring_amount or 0).quantize(Decimal("0.01"))
+            computed_amt = Decimal(calc_state.recurring_amount or 0).quantize(Decimal("0.01"))
+            amt_diff = stored_amt != computed_amt
             pi_diff = (current_a.payment_interval or "") != (
                 calc_state.payment_interval or ""
             )
@@ -360,16 +366,16 @@ class Command(BaseCommand):
                         "calculated_status": current_a.calculated_status,
                         "recurrence_pattern_status": current_a.recurrence_pattern_status,
                         "membership_authority": current_a.membership_authority,
-                        "recurring_amount": float(current_a.recurring_amount or 0),
-                        "payment_interval": current_a.payment_interval or "",
+                        "recurring_amount": format(stored_amt, ".2f"),
+                        "payment_interval": current_a.payment_interval or "None",
                         "rule_version_id": current_a.rule_version_id,
                     },
                     "after": {
                         "calculated_status": calc_state.calculated_status,
                         "recurrence_pattern_status": calc_state.recurrence_pattern_status,
                         "membership_authority": calc_state.membership_authority,
-                        "recurring_amount": float(calc_state.recurring_amount or 0),
-                        "payment_interval": calc_state.payment_interval or "",
+                        "recurring_amount": format(computed_amt, ".2f"),
+                        "payment_interval": calc_state.payment_interval or "None",
                         "rule_version_id": calc_state.rule_version_id,
                     },
                     "matrix_state_before": before_state_id,

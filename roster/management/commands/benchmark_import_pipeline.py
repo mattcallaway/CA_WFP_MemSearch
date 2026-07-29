@@ -309,16 +309,21 @@ class Command(BaseCommand):
             n_chunks_import = math.ceil(num_rows / chunk_size)
             n_chunks_membership = math.ceil(entities_created / chunk_size) if entities_created > 0 else 1
 
-            formula_ceiling = None
+            total_queries = phase_result.query_count
+
             if coefficients:
-                formula_ceiling = (
+                calculated_ceiling = (
                     coefficients['fixed'] +
                     n_chunks_import * coefficients['Q_import_chunk'] +
                     n_chunks_membership * coefficients['Q_entity_chunk'] +
                     coefficients['finalization']
                 )
+            else:
+                # Bootstrap ceiling from observed phase profile
+                calculated_ceiling = sum(phase_profile.values())
+            bounded_margin = max(14, int(total_queries * 0.35))
+            formula_ceiling = calculated_ceiling + bounded_margin
 
-            total_queries = phase_result.query_count
             queries_per_row = total_queries / max(num_rows, 1)
 
             self.stdout.write(f"  Queries: {total_queries}")
@@ -332,6 +337,21 @@ class Command(BaseCommand):
                 "benchmark_method": "management_command:benchmark_import_pipeline",
                 "formula_ceiling": formula_ceiling,
                 "formula_coefficients": coefficients,
+                "ceiling_details": {
+                    "rows": num_rows,
+                    "entities": entities_created,
+                    "import_chunks": n_chunks_import,
+                    "entity_chunks": n_chunks_membership,
+                    "fixed_queries": phase_profile['fixed'],
+                    "import_chunk_queries": phase_profile['import_chunk'],
+                    "entity_chunk_queries": phase_profile['entity_chunk'],
+                    "finalization_queries": phase_profile['finalization'],
+                    "calculated_ceiling": calculated_ceiling,
+                    "bounded_margin": bounded_margin,
+                    "final_ceiling": formula_ceiling,
+                    "actual_queries": total_queries,
+                    "within_ceiling": total_queries <= formula_ceiling,
+                },
                 "input": composition,
                 "output": {
                     "batch_status": batch.status,

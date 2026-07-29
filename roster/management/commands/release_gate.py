@@ -249,14 +249,13 @@ class Command(BaseCommand):
             perf = data.get("performance", {})
             queries = perf.get("total_queries", 0)
 
-            # Check for formula-derived ceiling
+            # Check for formula-derived ceiling — null ceiling cannot pass
             ceiling = data.get("formula_ceiling")
+            ceiling_details = data.get("ceiling_details", {})
             if ceiling is not None:
                 scale_pass = queries <= ceiling
             else:
-                # Fallback: chunk-based check
-                qpr = perf.get("queries_per_row", 1.0)
-                scale_pass = qpr < 0.5
+                scale_pass = False
 
             method = data.get("benchmark_method", "unknown")
             is_authoritative = method == "management_command:benchmark_import_pipeline"
@@ -268,6 +267,7 @@ class Command(BaseCommand):
             scales[str(scale)] = {
                 "queries": queries,
                 "ceiling": ceiling,
+                "ceiling_details": ceiling_details,
                 "method": method,
                 "is_authoritative": is_authoritative,
                 "status": "PASS" if scale_pass else "FAIL",
@@ -436,46 +436,54 @@ class Command(BaseCommand):
         # 4. Per-entity parity checks
         before_mismatches = []
         after_mismatches = []
-        matrix_mismatches = []
+        before_matrix_mismatches = []
+        after_matrix_mismatches = []
         field_mismatches = []
 
         for eid in audit_ids & repair_ids:
             ar = audit_mismatches[eid]
             rr = repair_entities[eid]
 
-            # Before-state parity
-            audit_before = {
+            # Before-state parity (use full stored_state if available)
+            audit_stored = ar.get("stored_state", {
                 "calculated_status": ar.get("stored_calculated_status", ""),
                 "recurrence_pattern_status": ar.get("stored_recurrence_pattern_status", ""),
                 "membership_authority": ar.get("stored_membership_authority", ""),
-            }
-            repair_before = {
-                "calculated_status": rr.get("before", {}).get("calculated_status", ""),
-                "recurrence_pattern_status": rr.get("before", {}).get("recurrence_pattern_status", ""),
-                "membership_authority": rr.get("before", {}).get("membership_authority", ""),
-            }
-            if audit_before != repair_before:
+            })
+            repair_before = rr.get("before", {})
+            # Compare core 3 fields
+            before_core = all(
+                audit_stored.get(f, "") == repair_before.get(f, "")
+                for f in ["calculated_status", "recurrence_pattern_status", "membership_authority"]
+            )
+            if not before_core:
                 before_mismatches.append(eid)
 
-            # After-state parity
-            audit_after = {
+            # After-state parity (use full repair_state if available)
+            audit_repair = ar.get("repair_state", {
                 "calculated_status": ar.get("repair_calculated_status", ""),
                 "recurrence_pattern_status": ar.get("repair_recurrence_pattern_status", ""),
                 "membership_authority": ar.get("repair_membership_authority", ""),
-            }
-            repair_after = {
-                "calculated_status": rr.get("after", {}).get("calculated_status", ""),
-                "recurrence_pattern_status": rr.get("after", {}).get("recurrence_pattern_status", ""),
-                "membership_authority": rr.get("after", {}).get("membership_authority", ""),
-            }
-            if audit_after != repair_after:
+            })
+            repair_after = rr.get("after", {})
+            after_core = all(
+                audit_repair.get(f, "") == repair_after.get(f, "")
+                for f in ["calculated_status", "recurrence_pattern_status", "membership_authority"]
+            )
+            if not after_core:
                 after_mismatches.append(eid)
 
-            # Matrix assignment parity
-            audit_matrix = ar.get("matched_state_id") or "UNMATCHED"
+            # Before matrix-state parity
+            audit_stored_matrix = ar.get("stored_matrix_state_id") or ar.get("matched_state_id") or "UNMATCHED"
             repair_matrix_before = rr.get("matrix_state_before", "")
-            if audit_matrix != repair_matrix_before:
-                matrix_mismatches.append(eid)
+            if audit_stored_matrix != repair_matrix_before:
+                before_matrix_mismatches.append(eid)
+
+            # After matrix-state parity
+            audit_repair_matrix = ar.get("repair_matrix_state_id", "UNMATCHED")
+            repair_matrix_after = rr.get("matrix_state_after", "")
+            if audit_repair_matrix != repair_matrix_after:
+                after_matrix_mismatches.append(eid)
 
             # Mismatch field parity
             audit_fields = set(ar.get("repair_field_diffs", {}).keys())
@@ -485,12 +493,14 @@ class Command(BaseCommand):
 
         before_match = len(before_mismatches) == 0
         after_match = len(after_mismatches) == 0
-        matrix_match = len(matrix_mismatches) == 0
+        before_matrix_match = len(before_matrix_mismatches) == 0
+        after_matrix_match = len(after_matrix_mismatches) == 0
         fields_match = len(field_mismatches) == 0
 
         parity = (
             ids_match and assessment_ids_match and counts_match
-            and before_match and after_match and matrix_match
+            and before_match and after_match
+            and before_matrix_match and after_matrix_match
             and fields_match
         )
 
@@ -505,11 +515,13 @@ class Command(BaseCommand):
                 "counts_match": counts_match,
                 "before_states_match": before_match,
                 "after_states_match": after_match,
-                "matrix_assignments_match": matrix_match,
+                "before_matrix_assignments_match": before_matrix_match,
+                "after_matrix_assignments_match": after_matrix_match,
                 "mismatch_fields_match": fields_match,
                 "before_mismatch_entities": before_mismatches[:10],
                 "after_mismatch_entities": after_mismatches[:10],
-                "matrix_mismatch_entities": matrix_mismatches[:10],
+                "before_matrix_mismatch_entities": before_matrix_mismatches[:10],
+                "after_matrix_mismatch_entities": after_matrix_mismatches[:10],
                 "field_mismatch_entities": field_mismatches[:10],
                 "missing_from_repair": list(audit_ids - repair_ids)[:10],
                 "missing_from_audit": list(repair_ids - audit_ids)[:10],
@@ -540,36 +552,57 @@ class Command(BaseCommand):
 
     # === G09: Concurrency Safety and Completion ===
     def _g09_concurrency(self):
+        """Require file-backed database concurrency evidence."""
+        evidence_path = os.path.join("release", "concurrency_evidence.json")
         test_file = os.path.join("roster", "tests", "test_concurrency_file_backed.py")
-        conc_output = os.path.join("release", "concurrency_output.json")
-        exists = os.path.exists(test_file)
-        if not exists:
+        if not os.path.exists(evidence_path):
             return self._gate(
                 "G09", "Concurrency Safety and Completion", "MISSING_EVIDENCE",
-                notes="test_concurrency_file_backed.py not found",
+                notes="concurrency_evidence.json not found",
             )
-        # Substantive evidence from recorded test output
+        with open(evidence_path) as f:
+            data = json.load(f)
+
+        # Require all file-backed database assertions
+        db_path = data.get("resolved_database_path", "")
+        is_file_backed = (
+            data.get("file_existed_during_test", False)
+            and data.get("database_size_greater_than_zero", False)
+            and db_path != ":memory:"
+            and "mode=memory" not in db_path
+            and db_path != data.get("active_database_path", "")
+        )
+        substantive = (
+            is_file_backed
+            and data.get("separate_worker_connections", False)
+            and data.get("eventual_success_result", False)
+            and data.get("duplicate_count_result", False)
+            and data.get("test_process_exit_code") == 0
+            and data.get("database_file_cleanup", False)
+            and data.get("temp_directory_cleanup", False)
+        )
+
         evidence = {
-            "test_file_exists": True,
-            "verification_method": "externally_verified",
+            "resolved_database_path": db_path,
+            "file_existed_during_test": data.get("file_existed_during_test"),
+            "database_size_bytes": data.get("database_size_bytes"),
+            "database_size_greater_than_zero": data.get("database_size_greater_than_zero"),
+            "is_file_backed": is_file_backed,
+            "separate_worker_connections": data.get("separate_worker_connections"),
+            "eventual_success_result": data.get("eventual_success_result"),
+            "duplicate_count_result": data.get("duplicate_count_result"),
+            "lock_retry_result": data.get("lock_retry_result"),
+            "test_process_exit_code": data.get("test_process_exit_code"),
+            "wal_shm_cleanup": data.get("wal_shm_cleanup"),
+            "database_file_cleanup": data.get("database_file_cleanup"),
+            "temp_directory_cleanup": data.get("temp_directory_cleanup"),
         }
-        if os.path.exists(conc_output):
-            with open(conc_output) as f:
-                data = json.load(f)
-            evidence.update({
-                "test_exit_code": data.get("exit_code", None),
-                "test_count": data.get("test_count", None),
-                "file_backed_db_proof": data.get("file_backed_db_proof", None),
-                "eventual_success": data.get("eventual_success", None),
-                "duplicate_count_result": data.get("duplicate_count_result", None),
-                "temp_db_cleanup": data.get("temp_db_cleanup", None),
-            })
-            substantive = data.get("exit_code") == 0 and data.get("test_count", 0) > 0
-        else:
-            evidence["external_artifact_hash"] = hashlib.sha256(
+        # Add test file hash
+        if os.path.exists(test_file):
+            evidence["test_file_sha256"] = hashlib.sha256(
                 open(test_file, "rb").read()
             ).hexdigest()
-            substantive = True  # file hash reference to full release artifact
+
         return self._gate(
             "G09", "Concurrency Safety and Completion",
             "PASS" if substantive else "FAIL",
