@@ -305,7 +305,7 @@ class Command(BaseCommand):
             sum_cats = sum(
                 inp.get(k, 0) for k in [
                     "unique_rows", "exact_duplicate_rows", "missing_txn_rows",
-                    "amendment_rows", "refund_rows", "reprocessed_rows",
+                    "refund_rows",
                 ]
             )
             partition_ok = total == sum_cats
@@ -369,7 +369,11 @@ class Command(BaseCommand):
 
     # === G07: Membership Repair Parity ===
     def _g07_repair_parity(self, audit_file, repair_file):
-        """Entity-level parity between G06 and repair manifest."""
+        """Full entity-level parity between G06 audit and repair manifest.
+        
+        Compares by entity ID, assessment ID, before states, computed
+        after states, matrix assignments, mismatch fields, and counts.
+        """
         if not audit_file or not repair_file:
             return self._gate(
                 "G07", "Membership Repair Parity", "MISSING_EVIDENCE",
@@ -387,7 +391,7 @@ class Command(BaseCommand):
         with open(repair_file) as f:
             repair_data = json.load(f)
 
-        # Extract entity-level records from audit
+        # Extract entity-level records from audit (all current-repair mismatches)
         audit_records = audit_data.get("records", [])
         audit_mismatches = {
             r["entity_id"]: r
@@ -403,36 +407,92 @@ class Command(BaseCommand):
             if r.get("reason_code") != "CALCULATOR_ERROR"
         }
 
-        # Check entity ID sets match
+        # 1. Entity ID sets
         audit_ids = set(audit_mismatches.keys())
         repair_ids = set(repair_entities.keys())
         ids_match = audit_ids == repair_ids
 
-        # Check counts match
+        # 2. Assessment ID sets
+        audit_assess_ids = {
+            r["entity_id"]: r.get("assessment_id")
+            for r in audit_records
+            if not r.get("current_repair_match", True)
+        }
+        repair_assess_ids = {
+            r["entity_id"]: r.get("current_assessment_id")
+            for r in repair_records
+            if r.get("reason_code") != "CALCULATOR_ERROR"
+        }
+        assessment_ids_match = all(
+            audit_assess_ids.get(eid) == repair_assess_ids.get(eid)
+            for eid in audit_ids & repair_ids
+        )
+
+        # 3. Counts
         audit_count = len(audit_mismatches)
         repair_count = len(repair_entities)
         counts_match = audit_count == repair_count
 
-        # Check computed states match for each entity
-        state_mismatches = []
+        # 4. Per-entity parity checks
+        before_mismatches = []
+        after_mismatches = []
+        matrix_mismatches = []
+        field_mismatches = []
+
         for eid in audit_ids & repair_ids:
             ar = audit_mismatches[eid]
             rr = repair_entities[eid]
 
-            # Compare computed after-state
-            audit_cs = ar.get("repair_calculated_status", "")
-            repair_cs = rr.get("after", {}).get("calculated_status", "")
-            audit_rps = ar.get("repair_recurrence_pattern_status", "")
-            repair_rps = rr.get("after", {}).get("recurrence_pattern_status", "")
-            audit_ma = ar.get("repair_membership_authority", "")
-            repair_ma = rr.get("after", {}).get("membership_authority", "")
+            # Before-state parity
+            audit_before = {
+                "calculated_status": ar.get("stored_calculated_status", ""),
+                "recurrence_pattern_status": ar.get("stored_recurrence_pattern_status", ""),
+                "membership_authority": ar.get("stored_membership_authority", ""),
+            }
+            repair_before = {
+                "calculated_status": rr.get("before", {}).get("calculated_status", ""),
+                "recurrence_pattern_status": rr.get("before", {}).get("recurrence_pattern_status", ""),
+                "membership_authority": rr.get("before", {}).get("membership_authority", ""),
+            }
+            if audit_before != repair_before:
+                before_mismatches.append(eid)
 
-            if (audit_cs != repair_cs or audit_rps != repair_rps
-                    or audit_ma != repair_ma):
-                state_mismatches.append(eid)
+            # After-state parity
+            audit_after = {
+                "calculated_status": ar.get("repair_calculated_status", ""),
+                "recurrence_pattern_status": ar.get("repair_recurrence_pattern_status", ""),
+                "membership_authority": ar.get("repair_membership_authority", ""),
+            }
+            repair_after = {
+                "calculated_status": rr.get("after", {}).get("calculated_status", ""),
+                "recurrence_pattern_status": rr.get("after", {}).get("recurrence_pattern_status", ""),
+                "membership_authority": rr.get("after", {}).get("membership_authority", ""),
+            }
+            if audit_after != repair_after:
+                after_mismatches.append(eid)
 
-        states_match = len(state_mismatches) == 0
-        parity = ids_match and counts_match and states_match
+            # Matrix assignment parity
+            audit_matrix = ar.get("matched_state_id") or "UNMATCHED"
+            repair_matrix_before = rr.get("matrix_state_before", "")
+            if audit_matrix != repair_matrix_before:
+                matrix_mismatches.append(eid)
+
+            # Mismatch field parity
+            audit_fields = set(ar.get("repair_field_diffs", {}).keys())
+            repair_fields = set(rr.get("changed_fields", []))
+            if audit_fields != repair_fields:
+                field_mismatches.append(eid)
+
+        before_match = len(before_mismatches) == 0
+        after_match = len(after_mismatches) == 0
+        matrix_match = len(matrix_mismatches) == 0
+        fields_match = len(field_mismatches) == 0
+
+        parity = (
+            ids_match and assessment_ids_match and counts_match
+            and before_match and after_match and matrix_match
+            and fields_match
+        )
 
         return self._gate(
             "G07", "Membership Repair Parity",
@@ -441,9 +501,16 @@ class Command(BaseCommand):
                 "audit_mismatch_count": audit_count,
                 "repair_record_count": repair_count,
                 "entity_id_sets_match": ids_match,
+                "assessment_id_sets_match": assessment_ids_match,
                 "counts_match": counts_match,
-                "states_match": states_match,
-                "state_mismatch_entity_ids": state_mismatches[:10],
+                "before_states_match": before_match,
+                "after_states_match": after_match,
+                "matrix_assignments_match": matrix_match,
+                "mismatch_fields_match": fields_match,
+                "before_mismatch_entities": before_mismatches[:10],
+                "after_mismatch_entities": after_mismatches[:10],
+                "matrix_mismatch_entities": matrix_mismatches[:10],
+                "field_mismatch_entities": field_mismatches[:10],
                 "missing_from_repair": list(audit_ids - repair_ids)[:10],
                 "missing_from_audit": list(repair_ids - audit_ids)[:10],
             },

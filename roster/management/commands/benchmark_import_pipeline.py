@@ -111,36 +111,41 @@ class Command(BaseCommand):
             "unique_rows": 0,
             "exact_duplicate_rows": 0,
             "missing_txn_rows": 0,
-            "amendment_rows": 0,
             "refund_rows": 0,
-            "reprocessed_rows": 0,
         }
 
+        import hashlib
         seen_hashes = set()
         for i in range(num_rows):
             category = i % 20
 
             if category == 0 and i > 0:
+                # Exact duplicate of DONOR 0
                 row = ["BENCHMARK, DONOR 0", "50.00", "2026-05-15", "90012", "TXN_0"]
                 composition["exact_duplicate_rows"] += 1
             elif category == 5:
+                # Missing transaction number
                 row = [f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", ""]
                 composition["missing_txn_rows"] += 1
-            elif category == 10:
-                row = ["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"]
-                composition["amendment_rows"] += 1
             elif category == 15:
+                # Refund
                 row = [f"BENCHMARK, DONOR {i}", "-25.00", "2026-05-15", "90012", f"TXN_REF_{i}"]
                 composition["refund_rows"] += 1
-            elif category == 19:
-                row = ["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"]
-                composition["reprocessed_rows"] += 1
+            elif category in (10, 19):
+                # Additional exact duplicates (same content as existing rows)
+                # category 10: identical to DONOR 1 row
+                # category 19: identical to DONOR 2 row
+                if category == 10:
+                    row = ["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"]
+                else:
+                    row = ["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"]
+                composition["exact_duplicate_rows"] += 1
             else:
+                # Unique transaction
                 row = [f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", f"TXN_{i}"]
                 composition["unique_rows"] += 1
 
             writer.writerow(row)
-            import hashlib
             row_hash = hashlib.sha256(",".join(row).encode()).hexdigest()
             seen_hashes.add(row_hash)
 

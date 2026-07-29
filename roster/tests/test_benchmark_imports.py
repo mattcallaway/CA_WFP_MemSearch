@@ -81,9 +81,7 @@ class ImportBenchmarkTestCase(TestCase):
             "unique": 0,
             "exact_duplicate": 0,
             "missing_txn": 0,
-            "amendment": 0,
             "refund": 0,
-            "reprocessed": 0,
         }
 
         for i in range(num_rows):
@@ -95,15 +93,15 @@ class ImportBenchmarkTestCase(TestCase):
             elif category == 5:
                 writer.writerow([f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", ""])
                 composition["missing_txn"] += 1
-            elif category == 10:
-                writer.writerow(["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"])
-                composition["amendment"] += 1
             elif category == 15:
                 writer.writerow([f"BENCHMARK, DONOR {i}", "-25.00", "2026-05-15", "90012", f"TXN_REF_{i}"])
                 composition["refund"] += 1
-            elif category == 19:
-                writer.writerow(["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"])
-                composition["reprocessed"] += 1
+            elif category in (10, 19):
+                if category == 10:
+                    writer.writerow(["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"])
+                else:
+                    writer.writerow(["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"])
+                composition["exact_duplicate"] += 1
             else:
                 writer.writerow([f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", f"TXN_{i}"])
                 composition["unique"] += 1
