@@ -101,7 +101,7 @@ def _get_matrix_digest():
         "rejected_combinations": data.get("rejected_combinations", []),
     }
     canonical_json = json.dumps(
-        canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     )
     digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
     return digest, data.get("status", "UNKNOWN")
@@ -219,7 +219,7 @@ class Command(BaseCommand):
                 "git_revision": git_rev,
                 "migration_state": mig_state,
                 "database_snapshot_digest": db_digest,
-                "matrix_content_digest": matrix_digest,
+                "matrix_content_sha256": matrix_digest,
                 "matrix_status": matrix_status,
                 "rule_version_id": current_rule.id,
                 "repair_evaluation_date": str(eval_date),

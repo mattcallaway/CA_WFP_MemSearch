@@ -241,17 +241,16 @@ def calculate_membership_state(
             
     is_recurring = (valid_intervals + skipped_intervals) >= (rule.min_recurring_payments - 1)
     
-    # recurring amount calculation
-    last_three = net_payments[-3:]
-    recurring_amount = sum(p["amount"] for p in last_three) / Decimal(len(last_three)) if last_three else Decimal('0.00')
-    payment_interval = 'Monthly'
-    
     recent_payment = net_payments[-1]["transaction_date"]
     recent_days = (evaluation_date - recent_payment).days
     is_recent = recent_days <= rule.active_grace_period
     
     if is_recurring:
         pattern_status = 'RECURRING_PATTERN'
+        # Recurring amount: average of last three net-positive payment dates
+        last_three = net_payments[-3:]
+        recurring_amount = sum(p["amount"] for p in last_three) / Decimal(len(last_three)) if last_three else Decimal('0.00')
+        payment_interval = 'Monthly'
         if entity.verification_status == 'VERIFIED':
             authority = 'AUTHORITATIVE'
             if is_recent:
@@ -270,6 +269,10 @@ def calculate_membership_state(
             explanation = "Unverified recurring donor."
     else:
         pattern_status = 'IRREGULAR_PATTERN'
+        # Non-recurring: recurring_amount and payment_interval are not applicable.
+        # Only RECURRING_PATTERN states may carry these fields.
+        recurring_amount = Decimal('0.00')
+        payment_interval = 'None'
         if entity.verification_status == 'VERIFIED':
             authority = 'AUTHORITATIVE'
             status = 'INSUFFICIENT_HISTORY'

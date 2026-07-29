@@ -1,7 +1,9 @@
 {
   "schema_version": "2.0",
   "policy_version": "2B1-002",
-  "matrix_content_sha256": "31bb060d884894aed71a7a800087be9e1a58f5ec42e5cccc1bfed67064b2dfed",
+  "matrix_content_sha256": "ff84bb1ff4dde138d7159b5cc4d046e4fa561f21b2a87aabde515c55e410a25b",
+  "matrix_file_sha256": "31bb060d884894aed71a7a800087be9e1a58f5ec42e5cccc1bfed67064b2dfed",
+  "canonicalization_version": "json-sorted-compact-v1",
   "matrix_file_path": "roster/fixtures/allowed_state_matrix.json",
   "approval_status": "DRAFT",
   "approved_by": null,

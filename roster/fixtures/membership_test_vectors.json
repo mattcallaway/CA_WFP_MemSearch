@@ -552,6 +552,13 @@
     "vector_id": "VN01",
     "expected_rejected_rule_id": "R01",
     "is_negative_vector": true,
+    "candidate_state": {
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "PROVISIONAL"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R01: ACTIVE with non-authoritative (PROVISIONAL)",
     "inputs": {
       "entity_type": "INDIVIDUAL",
       "verification_status": "UNVERIFIED",
@@ -607,6 +614,13 @@
     "vector_id": "VN02",
     "expected_rejected_rule_id": "R02",
     "is_negative_vector": true,
+    "candidate_state": {
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "AUTHORITATIVE"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R02: ACTIVE with insufficient history",
     "inputs": {
       "entity_type": "INDIVIDUAL",
       "verification_status": "VERIFIED",
@@ -637,6 +651,13 @@
     "vector_id": "VN03",
     "expected_rejected_rule_id": "R03",
     "is_negative_vector": true,
+    "candidate_state": {
+      "calculated_status": "PROVISIONAL",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "AUTHORITATIVE"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R03: PROVISIONAL status with AUTHORITATIVE authority",
     "inputs": {
       "entity_type": "INDIVIDUAL",
       "verification_status": "VERIFIED",
@@ -674,6 +695,14 @@
     "vector_id": "VN04",
     "expected_rejected_rule_id": "R04",
     "is_negative_vector": true,
+    "candidate_state": {
+      "entity_type": "ORGANIZATION",
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R04: Non-individual with individual authority",
     "inputs": {
       "entity_type": "ORGANIZATION",
       "verification_status": "VERIFIED",
@@ -729,6 +758,14 @@
     "vector_id": "VN05",
     "expected_rejected_rule_id": "R05",
     "is_negative_vector": true,
+    "candidate_state": {
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "RECURRING_PATTERN",
+      "membership_authority": "AUTHORITATIVE",
+      "verification_status": "UNVERIFIED"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R05: Unverified with AUTHORITATIVE",
     "inputs": {
       "entity_type": "INDIVIDUAL",
       "verification_status": "UNVERIFIED",
@@ -784,6 +821,13 @@
     "vector_id": "VN06",
     "expected_rejected_rule_id": "R06",
     "is_negative_vector": true,
+    "candidate_state": {
+      "calculated_status": "ACTIVE",
+      "recurrence_pattern_status": "INSUFFICIENT_HISTORY",
+      "membership_authority": "AUTHORITATIVE"
+    },
+    "expected_validation_result": "REJECTED",
+    "rejection_reason": "R06: Recurring status with insufficient evidence",
     "inputs": {
       "entity_type": "INDIVIDUAL",
       "verification_status": "VERIFIED",
