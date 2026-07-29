@@ -116,28 +116,35 @@ class Command(BaseCommand):
             "reprocessed_rows": 0,
         }
 
+        seen_hashes = set()
         for i in range(num_rows):
             category = i % 20
 
             if category == 0 and i > 0:
-                writer.writerow(["BENCHMARK, DONOR 0", "50.00", "2026-05-15", "90012", "TXN_0"])
+                row = ["BENCHMARK, DONOR 0", "50.00", "2026-05-15", "90012", "TXN_0"]
                 composition["exact_duplicate_rows"] += 1
             elif category == 5:
-                writer.writerow([f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", ""])
+                row = [f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", ""]
                 composition["missing_txn_rows"] += 1
             elif category == 10:
-                writer.writerow(["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"])
+                row = ["BENCHMARK, DONOR 1", "999.99", "2026-06-01", "90012", "TXN_1"]
                 composition["amendment_rows"] += 1
             elif category == 15:
-                writer.writerow([f"BENCHMARK, DONOR {i}", "-25.00", "2026-05-15", "90012", f"TXN_REF_{i}"])
+                row = [f"BENCHMARK, DONOR {i}", "-25.00", "2026-05-15", "90012", f"TXN_REF_{i}"]
                 composition["refund_rows"] += 1
             elif category == 19:
-                writer.writerow(["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"])
+                row = ["BENCHMARK, DONOR 2", f"{10 + (2 % 100):.2f}", "2026-05-15", "90012", "TXN_2"]
                 composition["reprocessed_rows"] += 1
             else:
-                writer.writerow([f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", f"TXN_{i}"])
+                row = [f"BENCHMARK, DONOR {i}", f"{10 + (i % 100):.2f}", "2026-05-15", "90012", f"TXN_{i}"]
                 composition["unique_rows"] += 1
 
+            writer.writerow(row)
+            import hashlib
+            row_hash = hashlib.sha256(",".join(row).encode()).hexdigest()
+            seen_hashes.add(row_hash)
+
+        composition["unique_row_hashes"] = len(seen_hashes)
         tmp.close()
         return tmp.name, composition
 
@@ -256,14 +263,38 @@ class Command(BaseCommand):
             assessments_created = MembershipAssessment.objects.count()
             links_created = SourceRecordLink.objects.count()
 
-            # Row arithmetic: only exact intra-batch duplicates are skipped
-            skipped_exact_duplicates = max(0, composition["exact_duplicate_rows"])
-            prevented_duplicates = skipped_exact_duplicates
-            expected_contribution_rows = num_rows - prevented_duplicates
+            # Row arithmetic: count unique row hashes to determine expected
+            # contributions. The importer skips any row whose hash has been
+            # seen (explicit duplicates, reprocessed duplicates, and
+            # intra-batch amendment duplicates that produce identical rows).
+            unique_row_hashes = composition.get("unique_row_hashes", None)
+            if unique_row_hashes is not None:
+                expected_unique_rows = unique_row_hashes
+            else:
+                # Fallback: count from the CSV file
+                import hashlib
+                seen_hashes = set()
+                with open(csv_path, "r") as f:
+                    reader = csv.reader(f)
+                    next(reader)  # skip header
+                    for row in reader:
+                        h = hashlib.sha256(",".join(row).encode()).hexdigest()
+                        seen_hashes.add(h)
+                expected_unique_rows = len(seen_hashes)
+            
+            # Subtract validation failures (missing name, bad amount, bad date)
+            validation_failures = RawContribution.objects.filter(
+                import_batch=batch,
+                validation_status='VALIDATION_FAILED'
+            ).count()
+            expected_contribution_rows = expected_unique_rows - validation_failures
+            prevented_duplicates = num_rows - expected_unique_rows
 
             contribution_arithmetic = {
+                "expected_unique_rows": expected_unique_rows,
                 "expected_contribution_producing_rows": expected_contribution_rows,
                 "prevented_duplicates": prevented_duplicates,
+                "validation_failures": validation_failures,
                 "expected_contributions_created": expected_contribution_rows,
                 "actual_contributions_created": contribs_created,
                 "match": contribs_created == expected_contribution_rows,

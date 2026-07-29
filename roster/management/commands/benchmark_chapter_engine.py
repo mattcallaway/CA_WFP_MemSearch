@@ -321,12 +321,19 @@ class Command(BaseCommand):
         )
 
         chunk_size = 500
-        q_per_chunk = 8
-        q_per_chapter = 15
-        fixed_cost = 30
+        # Per entity chunk per chapter: 5 reads (entity slice, locations,
+        # resolutions, overrides, assessments) + 4 bulk writes (selections,
+        # results, rule_matches, assignments) = 9 queries
+        q_per_chunk = 9
+        # Fixed per-chapter: run.get + status update + ruleset fetch +
+        # entity count + chapter FK + completion save + audit = ~5
+        q_per_chapter = 5
+        fixed_cost = 20  # savepoints, promotion, overlap computation
         chapter_count = len(eval_runs)
+        n_chunks = math.ceil(scale / chunk_size)
         
-        formula_ceiling = fixed_cost + math.ceil(scale / chunk_size) * q_per_chunk + chapter_count * q_per_chapter
+        # Each chapter independently iterates through all entity chunks
+        formula_ceiling = fixed_cost + n_chunks * q_per_chunk * chapter_count + chapter_count * q_per_chapter
         overall_pass = actual_queries <= formula_ceiling
 
         self.stdout.write(f"  Queries: {actual_queries} (ceiling: {formula_ceiling})")

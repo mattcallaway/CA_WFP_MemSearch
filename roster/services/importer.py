@@ -273,6 +273,38 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
         cluster_key = ing_cache.get_cluster_key(cluster)
         ing_cache.assignments_by_cluster[cluster_key] = list(cluster.assignments.all())
 
+    # Pre-fetch composite duplicates for rows without transaction numbers
+    # This replaces the per-row DB query that was an N+1 hazard
+    no_txn_composites = {}  # (amount, date) -> list of (norm_name, zip, contribution)
+    no_txn_rows = [p for p in parsed_rows if not p['txn_num']]
+    if no_txn_rows:
+        # Collect unique (amount, date) pairs
+        composite_keys = set()
+        for p in no_txn_rows:
+            amt = parse_decimal(p['amount_val'])
+            dt = parse_date(p['date_val'])
+            if amt is not None and dt is not None:
+                composite_keys.add((amt, dt))
+        
+        if composite_keys:
+            # Batch-fetch candidates from completed batches
+            composite_keys_list = list(composite_keys)
+            for i in range(0, len(composite_keys_list), chunk_size):
+                chunk = composite_keys_list[i:i+chunk_size]
+                from django.db.models import Q
+                q_filter = Q()
+                for amt, dt in chunk:
+                    q_filter |= Q(amount=amt, transaction_date=dt)
+                candidates = Contribution.objects.filter(
+                    q_filter,
+                    raw_contribution__import_batch__status='COMPLETED'
+                ).select_related('raw_contribution')
+                for c in candidates:
+                    key = (c.amount, c.transaction_date)
+                    c_name = normalize_name(c.raw_contribution.original_values.get(name_col, ''))['normalized_full_name']
+                    c_zip = c.raw_contribution.original_values.get(zip_col, '').strip()
+                    no_txn_composites.setdefault(key, []).append((c_name, c_zip, c))
+
     successful_count = 0
     failed_count = 0
     duplicate_count = 0
@@ -338,15 +370,10 @@ def import_csv_file(file_path, file_name, mapping_profile_id, actor="SYSTEM", ov
                     validation_status = 'POSSIBLE_AMENDMENT'
                     warning_msg = f"Transaction number '{p['txn_num']}' exists with different amount/date (potential amendment)."
         else:
-            # Check composites in DB
-            db_composites = Contribution.objects.filter(
-                amount=parsed_amount,
-                transaction_date=parsed_date,
-                raw_contribution__import_batch__status='COMPLETED'
-            ).select_related('raw_contribution')
-            for c in db_composites:
-                c_name = normalize_name(c.raw_contribution.original_values.get(name_col, ''))['normalized_full_name']
-                c_zip = c.raw_contribution.original_values.get(zip_col, '').strip()
+            # Check composites from pre-fetched cache (no per-row DB query)
+            composite_key = (parsed_amount, parsed_date)
+            cached_composites = no_txn_composites.get(composite_key, [])
+            for c_name, c_zip, c in cached_composites:
                 if c_name == p['norm_name'] and c_zip == p['zip_val']:
                     validation_status = 'POSSIBLE_DUPLICATE'
                     warning_msg = "Possible duplicate based on identical Name, ZIP, Date, and Amount without a transaction number."

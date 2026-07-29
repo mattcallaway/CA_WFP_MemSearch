@@ -61,7 +61,7 @@ def run_chapter_evaluation(run_id):
     all contributor entities in chunked buffers.
     """
     try:
-        run = ChapterEvaluationRun.objects.get(id=run_id)
+        run = ChapterEvaluationRun.objects.select_related('rule_set', 'chapter').get(id=run_id)
     except ChapterEvaluationRun.DoesNotExist:
         return
 
@@ -164,7 +164,7 @@ def run_chapter_evaluation(run_id):
             # Get latest membership assessment by calculation_date
             assessments = MembershipAssessment.objects.filter(
                 contributor_entity_id__in=entity_ids
-            ).order_by('contributor_entity_id', '-calculation_date')
+            ).select_related('rule_version').order_by('contributor_entity_id', '-calculation_date')
             
             assessments_map = {}
             for ass in assessments:

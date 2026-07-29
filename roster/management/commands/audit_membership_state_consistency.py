@@ -126,6 +126,12 @@ class Command(BaseCommand):
                 "rule_version": 0,
                 "evaluation_date": 0,
             },
+            "historical_parity_classification": {
+                "PROVEN_HISTORICAL_MISMATCH": 0,
+                "HISTORICAL_MATCH": 0,
+                "BEST_EFFORT_RECONSTRUCTION_MISMATCH": 0,
+                "INSUFFICIENT_HISTORICAL_EVIDENCE": 0,
+            },
         }
 
         for a in assessments:
@@ -301,6 +307,20 @@ class Command(BaseCommand):
 
             if not hist_match:
                 summary["historical_parity_mismatches"] += 1
+                # Classify the historical-parity mismatch
+                # Historical coverage is unavailable (using current coverage as proxy)
+                # Contributions are not filtered to those operative at the historical date
+                # Amendment disposition at the historical date is not tracked
+                has_stored_rule = a.rule_version_id is not None
+                has_stored_eval_date = a.calculation_date is not None
+                if not has_stored_eval_date and not has_stored_rule:
+                    classification = "INSUFFICIENT_HISTORICAL_EVIDENCE"
+                else:
+                    # Coverage and amendment-disposition history are never available
+                    classification = "BEST_EFFORT_RECONSTRUCTION_MISMATCH"
+                summary["historical_parity_classification"][classification] += 1
+            else:
+                summary["historical_parity_classification"]["HISTORICAL_MATCH"] += 1
 
             if repair_match and tuple_match and evidence_match:
                 summary["fully_matching"] += 1
@@ -332,6 +352,7 @@ class Command(BaseCommand):
                 record["repair_field_diffs"] = repair_diffs
             if not hist_match and isinstance(hist_diffs, dict):
                 record["historical_field_diffs"] = hist_diffs
+                record["historical_parity_classification"] = classification
 
             records.append(record)
 
